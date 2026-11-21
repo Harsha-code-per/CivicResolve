@@ -1,5 +1,5 @@
 # Stage 1: Install dependencies & build client + server
-FROM node:22-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
@@ -11,7 +11,7 @@ COPY server ./server
 RUN npm run build
 
 # Stage 2: Minimal non-root production runtime for Google Cloud Run
-FROM node:22-alpine AS runtime
+FROM node:26-alpine AS runtime
 WORKDIR /app
 
 ENV NODE_ENV=production
