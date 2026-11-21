@@ -1,12 +1,22 @@
-# Problem Statement Alignment
+# Problem statement alignment
 
-CivicResolve directly fulfills every requirement of **CivicResolve: AI-Powered Citizen Grievance Management and Resolution** (PromptWars x GDG on-Campus PSG iTech).
+| Requirement                                                   | Implementation                                                                                                 | Tests                                                       |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Submit title, description, location, category, optional image | `src/ui/ReportForm.tsx`, `useReportDraft.ts`, `createIssueSchema`, `POST /api/issues`                          | `tests/ui/report.test.tsx`, `tests/server/api.test.ts`, e2e |
+| Gemini identifies the category                                | `server/ai/model.ts` (Gemini SDK, JSON schema output, inline photo), `server/ai/prompts.ts`                    | `tests/server/triage.test.ts`                               |
+| Priority by urgency and public impact                         | Gemini priority + `computeUrgencyScore` + `reconcileTriage` safety floor; SLA per priority                     | `tests/domain/domain.test.ts`                               |
+| Recommend the department                                      | `CATEGORY_TO_DEPARTMENT`, Gemini's department choice, admin reassignment                                       | domain, triage and admin tests                              |
+| Tracking dashboard: Reported, In Progress, Resolved           | `src/ui/IssueTracker.tsx`, `IssueCard`, `IssueTable`, status timeline, SLA countdown, filters                  | `tests/ui/tracker.test.tsx`, e2e                            |
+| Admin reviews, updates status, manages issues                 | `src/ui/AdminDashboard.tsx`, `AdminIssueRow.tsx`, `PATCH /api/admin/issues/:id`, workflow state machine        | `tests/ui/admin.test.tsx`, `tests/server/api.test.ts`, e2e  |
+| End-to-end workflow                                           | Report → Gemini triage → Firestore → tracker → admin → resolved, with an audit trail                           | `e2e/civicresolve.spec.ts`                                  |
+| Visualise progress toward resolution                          | `src/ui/ResolutionProgress.tsx`: resolution rate, open past SLA, median time to resolve, pipeline, departments | `tests/ui/tracker.test.tsx`, analytics tests                |
+| Use Google Gemini and Google Cloud                            | Gemini 3.x cascade, Cloud Run hosting, Firestore persistence, Secret Manager for the key                       | `tests/server/store.test.ts`, live deployment               |
 
-| Challenge Requirement                                                                   | Implementation                                                                                                                  | Key Files                                                                      |
-| :-------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------ | :----------------------------------------------------------------------------- |
-| **1. Citizen Issue Reporting** (title, description, location, category, optional image) | Accessible submission form with client file-to-dataURL reader, Zod validation, and server-side magic-byte PNG/JPEG/WebP check   | `src/ui/ReportForm.tsx`, `src/domain/schemas.ts`, `server/lib/security.ts`     |
-| **2. AI-Powered Classification** (Google Gemini)                                        | `@google/genai` multimodal text + image classifier with structured `responseSchema`, prompt fencing, and deterministic fallback | `server/ai/triage.ts`, `src/domain/departments.ts`                             |
-| **3. Priority Detection** (urgency & public impact)                                     | Bounded 10–100 urgency scorer + priority tiering (`Critical`, `High`, `Medium`, `Low`) with explicit SLA targets (`4h`–`168h`)  | `src/domain/priority.ts`, `server/ai/triage.ts`                                |
-| **4. Department Recommendation**                                                        | Maps classified grievances to six canonical municipal departments with admin reassignment support                               | `src/domain/departments.ts`, `src/ui/AdminDashboard.tsx`                       |
-| **5. Issue Tracking Dashboard** (`Reported`, `In Progress`, `Resolved`)                 | Public tracker with live KPIs, search, status/priority/department filters, card/table toggle, and immutable status timelines    | `src/ui/IssueTracker.tsx`, `src/domain/workflow.ts`, `src/domain/analytics.ts` |
-| **6. Admin Dashboard** (review, update statuses, manage issues)                         | HMAC-authenticated Command Center for status transitions, priority/department overrides, and mandatory audit notes              | `src/ui/AdminDashboard.tsx`, `server/app.ts`, `server/lib/auth.ts`             |
+## Beyond the brief
+
+- **Preview before filing:** citizens see how Gemini triaged their complaint before submitting it.
+- **Photo understanding:** Gemini uses the photo to confirm or correct the text.
+- **Safety floor:** the AI cannot under-rate a life-threatening hazard.
+- **SLA accountability:** every issue shows a due time, and late resolutions stay recorded as breaches.
+- **Transparency:** each issue states whether Gemini or the rule engine triaged it.
+- **Privacy:** photos are re-encoded in the browser, which removes EXIF location data.

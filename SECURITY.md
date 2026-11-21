@@ -1,13 +1,32 @@
 # Security
 
-CivicResolve applies defense-in-depth across HTTP transport, authentication, file uploads, AI prompt handling, and container runtime.
+## Threats and controls
 
-## Controls
+| Threat                        | Control                                                                                                                                                                          | Code                                        |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| XSS                           | CSP `default-src 'self'`, `script-src 'self'`, `style-src 'self'` (no inline script or style), `object-src 'none'`, `base-uri 'self'`. React escapes all text.                   | `server/lib/security.ts`                    |
+| Clickjacking                  | `frame-ancestors 'none'` and `X-Frame-Options: DENY`.                                                                                                                            | `server/lib/security.ts`                    |
+| Transport and isolation       | HSTS (2 years, preload), COOP/CORP same-origin, `nosniff`, strict referrer policy, a restrictive Permissions-Policy.                                                             | `server/lib/security.ts`                    |
+| CSRF                          | State-changing requests must be same-origin (or match `PUBLIC_ORIGIN`), and the admin cookie is `SameSite=Strict`.                                                               | `isSameOriginRequest`, `buildSessionCookie` |
+| Session theft or forgery      | Stateless HMAC-SHA256 token with an 8 h expiry, compared with `timingSafeEqual`, in an `HttpOnly; Secure; SameSite=Strict` cookie.                                               | `server/lib/auth.ts`                        |
+| Passcode brute force          | Per-IP sliding-window rate limit on all API routes; constant-time passcode comparison.                                                                                           | `server/lib/rate-limit.ts`                  |
+| Rate-limit evasion            | Only the rightmost `X-Forwarded-For` hop (appended by Cloud Run) is trusted; spoofed left-hand entries are ignored.                                                              | `getClientIp`                               |
+| Malicious uploads             | Data-URL pattern, size cap, and **magic-byte** checks for PNG, JPEG and WebP. Photos are re-encoded in the browser, which also strips EXIF GPS data.                             | `server/lib/images.ts`, `src/lib/image.ts`  |
+| Oversized or malformed bodies | `Content-Type: application/json` required; 16 KB cap (1 MB for photo submissions), streamed and aborted early; zod validation on every input.                                    | `readJsonBody`, `src/domain/schemas.ts`     |
+| Prompt injection              | Citizen text is fenced as untrusted data, fence tags in input are stripped, and Gemini's output must match a closed JSON schema (enums only for category, priority, department). | `server/ai/prompts.ts`                      |
+| AI downgrading a hazard       | The rule engine's priority is a floor that Gemini cannot lower.                                                                                                                  | `reconcileTriage`                           |
+| Information leakage           | Unknown errors return a generic 500, with no stack traces. Logs contain no user data.                                                                                            | `toPublicError`                             |
+| Weak production config        | The server refuses to start in production without `ADMIN_PASSCODE` and a 32+ character `SESSION_SECRET`.                                                                         | `server/config.ts`                          |
+| Secret exposure               | The Gemini key is stored in **Secret Manager** and injected at runtime, never committed. `.env*` files are git- and docker-ignored.                                              | README deploy section                       |
+| Path traversal                | Static files are resolved and must stay inside `dist/client`.                                                                                                                    | `serveStaticAsset`                          |
+| Container hardening           | Multi-stage build, production dependencies only, runs as the non-root `node` user.                                                                                               | `Dockerfile`                                |
+| Vulnerable dependencies       | `npm audit --audit-level=high` in CI (currently 0 vulnerabilities), Dependabot, CodeQL.                                                                                          | `.github/`                                  |
 
-- **Strict HTTP Headers (`server/lib/security.ts`):** Enforces `Content-Security-Policy` (`default-src 'self'`, `script-src 'self'`, `style-src 'self'`, `object-src 'none'`, `frame-ancestors 'none'`), `Strict-Transport-Security`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `COOP: same-origin`, `CORP: same-origin`, and `Permissions-Policy`.
-- **CSRF & Origin Protection (`server/app.ts`):** Blocks cross-origin state-changing requests (`POST`/`PATCH`) with `403`.
-- **Rate Limiting & Payload Caps (`server/lib/rate-limit.ts`, `server/lib/http.ts`):** Bounded per-IP sliding-window rate limiter (`429` + `Retry-After`) and strict body size caps (`16 KB` standard JSON, `2 MB` image upload).
-- **Binary Image Signature Validation (`server/lib/security.ts`):** Verifies authentic PNG, JPEG, and WebP magic bytes before storing or forwarding uploads to Gemini.
-- **Admin Authentication (`server/lib/auth.ts`):** Constant-time passcode comparison (`crypto.timingSafeEqual`) and HMAC-SHA256 signed `HttpOnly; SameSite=Strict` session cookies.
-- **AI Prompt-Injection Fencing (`server/ai/triage.ts`):** Wraps untrusted citizen text inside `<CITIZEN_REPORT>` delimiters, enforces Gemini structured `responseSchema`, and validates outputs with Zod (`aiTriageOutputSchema`).
-- **Supply Chain & Container Hardening:** Multi-stage `node:22-alpine` container running as non-root `USER node`, plus GitHub Actions CodeQL, Dependabot, and `npm audit --audit-level=high`.
+## Least privilege on Google Cloud
+
+The runtime service account holds only `roles/datastore.user` (Firestore) and
+`roles/secretmanager.secretAccessor`. Builds use `roles/run.builder`.
+
+## Reporting
+
+Please report vulnerabilities privately through GitHub security advisories on this repository.

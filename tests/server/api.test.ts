@@ -64,6 +64,7 @@ describe('public API', () => {
     expect(await health.json()).toEqual({ status: 'ok', service: 'civicresolve' });
     expect(health.headers.get('content-security-policy')).toContain("default-src 'self'");
     expect(health.headers.get('x-frame-options')).toBe('DENY');
+    expect((await fetch(`${base}/api/health`)).status).toBe(200);
 
     const data = (await (await fetch(`${base}/api/issues`)).json()) as {
       issues: { priority: string }[];

@@ -95,7 +95,8 @@ const isAdmin = ({ req, deps }: RouteContext): boolean =>
 const ROUTES: readonly Route[] = [
   {
     method: 'GET',
-    pattern: /^\/healthz$/,
+    // Cloud Run's front end reserves /healthz, so /api/health is the public probe.
+    pattern: /^\/(?:healthz|api\/health)$/,
     handle: ({ res }) => {
       sendJson(res, HTTP_STATUS.ok, { status: 'ok', service: 'civicresolve' });
       return Promise.resolve();
