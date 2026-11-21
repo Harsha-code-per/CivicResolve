@@ -565,6 +565,7 @@ textarea:focus-visible {
 /* Section headers (heading + action) centre their contents; cards keep top alignment. */
 .issue-header:has(> h2) {
   align-items: center;
+  margin-block: 2rem 1.25rem;
 }
 
 .issue-header > h2 {
