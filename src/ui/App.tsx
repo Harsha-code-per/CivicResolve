@@ -113,12 +113,12 @@ export function App(): ReactElement {
         <button
           type="button"
           className="btn"
-          aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
+          aria-pressed={theme === 'dark'}
           onClick={() => {
             setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
           }}
         >
-          {theme === 'light' ? 'Dark Mode' : 'Light Mode'}
+          Dark mode
         </button>
       </header>
 

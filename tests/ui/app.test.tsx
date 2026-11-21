@@ -52,9 +52,9 @@ describe('App shell', () => {
     vi.mocked(window.matchMedia).mockReturnValueOnce({ matches: true } as MediaQueryList);
     render(<App />);
     expect(document.documentElement.dataset['theme']).toBe('dark');
-    await userEvent.click(screen.getByRole('button', { name: /Switch to light theme/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Dark mode', pressed: true }));
     expect(document.documentElement.dataset['theme']).toBe('light');
-    await userEvent.click(screen.getByRole('button', { name: /Switch to dark theme/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Dark mode', pressed: false }));
     expect(document.documentElement.dataset['theme']).toBe('dark');
   });
 

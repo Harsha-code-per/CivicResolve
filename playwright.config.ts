@@ -9,6 +9,8 @@ export default defineConfig({
   use: {
     baseURL: 'http://127.0.0.1:8080',
     trace: 'on-first-retry',
+    // Axe samples colours mid-transition otherwise; the app honours reduced motion.
+    reducedMotion: 'reduce',
   },
   webServer: {
     command:
