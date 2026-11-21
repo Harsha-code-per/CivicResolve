@@ -9,6 +9,7 @@ describe('App shell', () => {
   it('renders the landing page with live metrics and no axe violations', async () => {
     mockFetch(baseRoutes());
     const { container } = render(<App />);
+    expect(screen.getAllByText('…')).toHaveLength(4);
     expect(await screen.findByText('4')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/verified resolution/);
     const results = await axe.run(container);

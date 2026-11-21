@@ -15,6 +15,8 @@ describe('IssueTracker', () => {
     const issues = seedIssues();
     const first = issues[0];
     if (first) issues[0] = { ...first, hasImage: true, triageSource: 'gemini' };
+    const fresh = issues[2];
+    if (fresh) issues[2] = { ...fresh, createdAt: new Date(NOW - 3_600_000).toISOString() };
     render(<IssueTracker issues={issues} analytics={computeAnalytics(issues, NOW)} nowMs={NOW} />);
     const user = userEvent.setup();
 
@@ -24,6 +26,7 @@ describe('IssueTracker', () => {
     );
     expect(screen.getAllByText(/Overdue by/).length).toBeGreaterThan(0);
     expect(screen.getByText('Resolved after SLA')).toBeInTheDocument();
+    expect(screen.getByText('Due in 23h')).toBeInTheDocument();
     expect(screen.getByText(/Triaged by Gemini/)).toBeInTheDocument();
 
     await user.type(screen.getByLabelText('Search ID, title, or location'), 'garbage');
@@ -50,7 +53,13 @@ describe('IssueTracker', () => {
 describe('LandingHero and TriageInspector', () => {
   it('navigates from the hero call-to-action buttons', async () => {
     const onNavigate = vi.fn();
-    render(<LandingHero analytics={computeAnalytics(seedIssues(), NOW)} onNavigate={onNavigate} />);
+    render(
+      <LandingHero
+        analytics={computeAnalytics(seedIssues(), NOW)}
+        onNavigate={onNavigate}
+        loading={false}
+      />,
+    );
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Report a Civic Issue' }));
     await user.click(screen.getByRole('button', { name: 'Explore Live Tracker' }));

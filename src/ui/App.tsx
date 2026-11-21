@@ -27,6 +27,7 @@ export function App(): ReactElement {
     window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
   );
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     document.documentElement.dataset['theme'] = theme;
@@ -39,10 +40,12 @@ export function App(): ReactElement {
         if (!active) return;
         setIssues(data.issues);
         setAuthenticated(isAdmin);
+        setLoading(false);
       })
       .catch((err: unknown) => {
         if (!active) return;
         setLoadError(err instanceof Error ? err.message : 'Unable to load civic issues.');
+        setLoading(false);
       });
     return () => {
       active = false;
@@ -130,7 +133,9 @@ export function App(): ReactElement {
         )}
 
         <div id={`panel-${view}`} role="tabpanel" aria-labelledby={`tab-${view}`}>
-          {view === 'overview' && <LandingHero analytics={analytics} onNavigate={setView} />}
+          {view === 'overview' && (
+            <LandingHero analytics={analytics} onNavigate={setView} loading={loading} />
+          )}
           {view === 'report' && (
             <ReportForm
               onCreated={(created) => {

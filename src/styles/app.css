@@ -561,3 +561,19 @@ textarea:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Section headers (heading + action) centre their contents; cards keep top alignment. */
+.issue-header:has(> h2) {
+  align-items: center;
+}
+
+.issue-header > h2 {
+  margin: 0;
+}
+
+@media (max-width: 860px) {
+  .topbar {
+    border-radius: var(--radius-lg);
+    position: static;
+  }
+}

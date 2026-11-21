@@ -6,15 +6,17 @@ export type ActiveView = 'overview' | 'report' | 'tracker' | 'admin';
 export interface LandingHeroProps {
   readonly analytics: IssueAnalytics;
   readonly onNavigate: (view: ActiveView) => void;
+  readonly loading: boolean;
 }
 
 /**
  * Renders the editorial landing hero, live municipal KPI bento, and 3-step AI architecture.
  *
- * @param props - Live analytics and navigation callback.
+ * @param props - Live analytics, loading flag and navigation callback.
  * @returns LandingHero element.
  */
-export function LandingHero({ analytics, onNavigate }: LandingHeroProps): ReactElement {
+export function LandingHero({ analytics, onNavigate, loading }: LandingHeroProps): ReactElement {
+  const show = (value: number | string): string => (loading ? '…' : String(value));
   return (
     <section aria-labelledby="hero-heading">
       <div className="hero">
@@ -57,22 +59,26 @@ export function LandingHero({ analytics, onNavigate }: LandingHeroProps): ReactE
           </button>
         </div>
 
-        <div className="bento-grid" aria-label="Live municipal resolution metrics">
+        <div
+          className="bento-grid"
+          aria-label="Live municipal resolution metrics"
+          aria-busy={loading}
+        >
           <article className="kpi-card">
             <div className="kpi-label">Total Civic Reports</div>
-            <div className="kpi-value">{analytics.total}</div>
+            <div className="kpi-value">{show(analytics.total)}</div>
           </article>
           <article className="kpi-card">
             <div className="kpi-label">Active Critical Hazards</div>
-            <div className="kpi-value">{analytics.criticalOpen}</div>
+            <div className="kpi-value">{show(analytics.criticalOpen)}</div>
           </article>
           <article className="kpi-card">
             <div className="kpi-label">In Progress</div>
-            <div className="kpi-value">{analytics.inProgress}</div>
+            <div className="kpi-value">{show(analytics.inProgress)}</div>
           </article>
           <article className="kpi-card">
             <div className="kpi-label">Resolution Rate</div>
-            <div className="kpi-value">{analytics.resolutionRate}%</div>
+            <div className="kpi-value">{show(`${String(analytics.resolutionRate)}%`)}</div>
           </article>
         </div>
       </div>
