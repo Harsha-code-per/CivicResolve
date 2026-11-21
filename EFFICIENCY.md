@@ -4,7 +4,7 @@
 
 | What                         | Result                                                                                                         |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| First-load JavaScript (gzip) | **79.6 kB** (React 68 kB + app 14 kB), budget 95 kB, enforced by `npm run budget`                              |
+| First-load JavaScript (gzip) | **80.0 kB** (React 68 kB + app 14 kB), budget 95 kB, enforced by `npm run budget`                              |
 | Firebase Auth (gzip)         | **45.5 kB**, loaded lazily only when sign-in is configured, never on the critical path; total JS budget 150 kB |
 | CSS shipped (gzip)           | **7.6 kB** including the 3D landing scene, budget 12 kB                                                        |
 | Runtime dependencies         | 9                                                                                                              |
