@@ -4,26 +4,29 @@
 
 ## Structure
 
-| Layer          | Responsibility                                                                                     | Depends on          |
-| -------------- | -------------------------------------------------------------------------------------------------- | ------------------- |
-| `src/domain`   | Pure rules: types, zod schemas, field limits, priority and safety floor, SLA, workflow, analytics. | nothing (zod only)  |
-| `src/ui`       | React views. State lives in hooks (`useReportDraft`); views only render.                           | domain, `src/lib`   |
-| `server/`      | Config, request pipeline (`app.ts`) and a route table (`routes.ts`).                               | domain, ports below |
-| `server/ai`    | `TriageModel` port, Gemini adapter, fenced prompts, cascade.                                       | domain              |
-| `server/store` | `IssueStore` port with in-memory and Firestore adapters.                                           | domain              |
+| Layer          | Responsibility                                                                                                                                                       | Depends on          |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `src/domain`   | Pure rules: types, zod schemas, field limits, priority and safety floor, SLA, workflow, analytics.                                                                   | nothing (zod only)  |
+| `src/app`      | Shell: hash routing (`routes.ts`), shared state hooks (`hooks.ts`), console layout and sidebar.                                                                      | ui, auth, domain    |
+| `src/auth`     | `AuthService` port over Firebase Auth (lazy-loaded) and the `AuthProvider` context.                                                                                  | `src/lib`           |
+| `src/landing`  | Public landing page and the CSS-3D city scene.                                                                                                                       | ui                  |
+| `src/ui`       | React views. State lives in hooks (`useReportDraft`, `useMyIssues`); views only render.                                                                              | domain, `src/lib`   |
+| `server/`      | Config, request pipeline (`app.ts`) and a route table (`routes.ts`) built from `routes/public.ts` and `routes/admin.ts`, which share helpers in `routes/context.ts`. | domain, ports below |
+| `server/ai`    | `TriageModel` port, Gemini adapter, fenced prompts, cascade.                                                                                                         | domain              |
+| `server/store` | `IssueStore` port with in-memory and Firestore adapters.                                                                                                             | domain              |
 
 `tests/quality/architecture.test.ts` enforces that `src/domain` never imports React, Node I/O, `fetch` or the server.
 
 ## Principles, and where they show
 
-| Principle                 | Where                                                                                                                                                                               |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Single responsibility** | `sla.ts` only does SLA maths; `images.ts` only validates and decodes photos; each route handler is a few lines.                                                                     |
-| **Open/closed**           | A new storage backend implements `IssueStore`; a new AI model implements `TriageModel`. Neither needs changes elsewhere.                                                            |
-| **Dependency inversion**  | `createApp`, `createAiTriageClient` and both stores take their dependencies (store, models, clock) as arguments, so tests inject fakes instead of mocking modules.                  |
-| **DRY**                   | One zod schema validates the request **and** generates Gemini's JSON schema. `FIELD_LIMITS` feeds both zod and the form's `maxLength`. `buildIssueRecord` is shared by both stores. |
-| **Fail safe**             | `toPublicError` maps every failure to one status and a safe message; unknown errors become a generic 500. Every AI failure falls back to the rule engine.                           |
-| **KISS / YAGNI**          | Five runtime dependencies (React, React DOM, zod, the Gemini SDK, Firestore). No router, state library or chart library; native `<progress>` draws the charts.                      |
+| Principle                 | Where                                                                                                                                                                                                            |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Single responsibility** | `sla.ts` only does SLA maths; `images.ts` only validates and decodes photos; each route handler is a few lines.                                                                                                  |
+| **Open/closed**           | A new storage backend implements `IssueStore`; a new AI model implements `TriageModel`; a new identity provider implements `IdentityVerifier` (server) or `AuthService` (client). None needs changes elsewhere.  |
+| **Dependency inversion**  | `createApp`, `createAiTriageClient`, both stores, `createFirebaseVerifier` (key set) and `AuthProvider` (service loader) take their dependencies as arguments, so tests inject fakes instead of mocking modules. |
+| **DRY**                   | One zod schema validates the request **and** generates Gemini's JSON schema. `FIELD_LIMITS` feeds both zod and the form's `maxLength`. `buildIssueRecord` is shared by both stores.                              |
+| **Fail safe**             | `toPublicError` maps every failure to one status and a safe message; unknown errors become a generic 500. Every AI failure falls back to the rule engine.                                                        |
+| **KISS / YAGNI**          | No router (a 30-line hash router), no state library, no chart library (native `<progress>` and `<meter>`), no 3D library (CSS transforms). Only the two Firebase packages auth needs, not the whole SDK.         |
 
 ## Enforced rules
 

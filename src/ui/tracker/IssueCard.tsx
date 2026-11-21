@@ -3,6 +3,7 @@ import { CATEGORY_LABELS } from '../../domain/departments.js';
 import { computeSlaState, describeSla } from '../../domain/sla.js';
 import type { CivicIssue } from '../../domain/types.js';
 import { PRIORITY_LABELS, STATUS_LABELS } from '../labels.js';
+import { StatusStepper } from '../StatusStepper.js';
 
 export interface IssueCardProps {
   readonly issue: CivicIssue;
@@ -23,19 +24,20 @@ export function IssueCard({ issue, nowMs }: IssueCardProps): ReactElement {
         <div>
           <span className="issue-id">{issue.id}</span>
           <h3 id={`issue-${issue.id}`}>{issue.title}</h3>
-          <p>{issue.location}</p>
+          <p className="muted">{issue.location}</p>
         </div>
         <div className="badge-row">
-          <span className={`badge badge-${issue.priority}`}>
+          <span className={`chip chip-${issue.priority}`}>
             {PRIORITY_LABELS[issue.priority]} priority
           </span>
-          <span className={`badge badge-${issue.status}`}>{STATUS_LABELS[issue.status]}</span>
-          <span className={`badge ${breached ? 'badge-critical' : 'badge-neutral'}`}>
+          <span className={`chip chip-${issue.status}`}>{STATUS_LABELS[issue.status]}</span>
+          <span className={`chip ${breached ? 'chip-critical' : 'chip-neutral'}`}>
             {describeSla(issue, nowMs)}
           </span>
         </div>
       </div>
-      <p>{issue.aiSummary}</p>
+      <p className="issue-summary">{issue.aiSummary}</p>
+      <StatusStepper status={issue.status} />
       <p className="issue-meta">
         {CATEGORY_LABELS[issue.category]} · {issue.department} · SLA {issue.slaHours}h · Urgency{' '}
         {issue.urgencyScore}/100 · Triaged by {issue.triageSource === 'gemini' ? 'Gemini' : 'rules'}

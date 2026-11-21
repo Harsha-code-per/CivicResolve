@@ -33,9 +33,13 @@ const messageOf = (error: unknown, fallback: string): string =>
  * Holds the report form's draft, photo, triage preview and submission state.
  *
  * @param onCreated - Called with the stored issue after a successful submission.
+ * @param getIdToken - Supplies the citizen's ID token (null when signed out).
  * @returns Draft state and the actions the form can take.
  */
-export function useReportDraft(onCreated: (issue: CivicIssue) => void): ReportDraftState {
+export function useReportDraft(
+  onCreated: (issue: CivicIssue) => void,
+  getIdToken: () => Promise<string | null>,
+): ReportDraftState {
   const [draft, setDraft] = useState<ReportDraft>(EMPTY_DRAFT);
   const [imageDataUrl, setImageDataUrl] = useState<string | undefined>(undefined);
   const [triage, setTriage] = useState<TriageResult | null>(null);
@@ -87,7 +91,7 @@ export function useReportDraft(onCreated: (issue: CivicIssue) => void): ReportDr
     submit: () =>
       run(async () => {
         setSuccessId(null);
-        const created = await submitIssue(payload());
+        const created = await submitIssue(payload(), await getIdToken());
         setTriage(created.triage);
         setSuccessId(created.issue.id);
         setDraft(EMPTY_DRAFT);

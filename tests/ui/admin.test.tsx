@@ -2,7 +2,8 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { AdminDashboard } from '../../src/ui/AdminDashboard.js';
-import { mockFetch, seedIssues } from './helpers.js';
+import { AuthProvider } from '../../src/auth/AuthProvider.js';
+import { authRoutes, fakeAuthService, GUEST_USER, mockFetch, seedIssues } from './helpers.js';
 
 describe('AdminDashboard', () => {
   it('signs in, reports a wrong passcode, and signs out', async () => {
@@ -25,11 +26,11 @@ describe('AdminDashboard', () => {
       />,
     );
     const user = userEvent.setup();
-    await user.type(screen.getByLabelText('Administrator Passcode'), 'wrong');
-    await user.click(screen.getByRole('button', { name: 'Sign In to Admin Dashboard' }));
+    await user.type(screen.getByLabelText('Administrator passcode'), 'wrong');
+    await user.click(screen.getByRole('button', { name: 'Sign in with passcode' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Invalid administrator passcode.');
-    await user.type(screen.getByLabelText('Administrator Passcode'), 'civic-admin-2026');
-    await user.click(screen.getByRole('button', { name: 'Sign In to Admin Dashboard' }));
+    await user.type(screen.getByLabelText('Administrator passcode'), 'civic-admin-2026');
+    await user.click(screen.getByRole('button', { name: 'Sign in with passcode' }));
     await vi.waitFor(() => {
       expect(onAuthChange).toHaveBeenCalledWith(true);
     });
@@ -49,8 +50,8 @@ describe('AdminDashboard', () => {
       />,
     );
     const user = userEvent.setup();
-    await user.type(screen.getByLabelText('Administrator Passcode'), 'pass');
-    await user.click(screen.getByRole('button', { name: 'Sign In to Admin Dashboard' }));
+    await user.type(screen.getByLabelText('Administrator passcode'), 'pass');
+    await user.click(screen.getByRole('button', { name: 'Sign in with passcode' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Sign in failed.');
   });
 
@@ -92,18 +93,18 @@ describe('AdminDashboard', () => {
       screen.getByLabelText('Department'),
       'Traffic & Public Safety Authority',
     );
-    await user.type(screen.getByLabelText('Resolution / Dispatch Audit Note'), 'Patched');
-    await user.click(screen.getByRole('button', { name: 'Save Status Update' }));
+    await user.type(screen.getByLabelText('Audit note (required)'), 'Patched');
+    await user.click(screen.getByRole('button', { name: 'Save update for CR-2026-1001' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Invalid status transition');
 
-    await user.type(screen.getByLabelText('Resolution / Dispatch Audit Note'), 'Patched again');
-    await user.click(screen.getByRole('button', { name: 'Save Status Update' }));
+    await user.type(screen.getByLabelText('Audit note (required)'), 'Patched again');
+    await user.click(screen.getByRole('button', { name: 'Save update for CR-2026-1001' }));
     expect(await screen.findByText('Updated CR-2026-1001 to resolved.')).toBeInTheDocument();
     expect(onUpdated).toHaveBeenCalled();
 
-    await user.click(screen.getByRole('button', { name: 'Sign Out' }));
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Sign out broke.');
-    await user.click(screen.getByRole('button', { name: 'Sign Out' }));
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
     await vi.waitFor(() => {
       expect(onAuthChange).toHaveBeenCalledWith(false);
     });
@@ -123,10 +124,66 @@ describe('AdminDashboard', () => {
       />,
     );
     const user = userEvent.setup();
-    await user.type(screen.getByLabelText('Resolution / Dispatch Audit Note'), 'Note');
-    await user.click(screen.getByRole('button', { name: 'Save Status Update' }));
+    await user.type(screen.getByLabelText('Audit note (required)'), 'Note');
+    await user.click(screen.getByRole('button', { name: 'Save update for CR-2026-1001' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Failed to update issue.');
-    await user.click(screen.getByRole('button', { name: 'Sign Out' }));
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Sign out failed.');
+  });
+
+  it('signs in with an allow-listed Google account, signing in to Google first if needed', async () => {
+    let calls = 0;
+    mockFetch({
+      ...authRoutes(),
+      'POST /api/admin/google': () => {
+        calls += 1;
+        return calls === 1
+          ? { status: 403, body: { error: 'This Google account is not an administrator.' } }
+          : { body: { authenticated: true } };
+      },
+    });
+    const auth = fakeAuthService(GUEST_USER);
+    const onAuthChange = vi.fn();
+    render(
+      <AuthProvider load={auth.load}>
+        <AdminDashboard
+          authenticated={false}
+          issues={[]}
+          onAuthChange={onAuthChange}
+          onUpdated={vi.fn()}
+        />
+      </AuthProvider>,
+    );
+    const user = userEvent.setup();
+    const google = await screen.findByRole('button', {
+      name: 'Sign in with an admin Google account',
+    });
+    await user.click(google);
+    expect(await screen.findByRole('alert')).toHaveTextContent('not an administrator');
+    expect(auth.service.signInWithGoogle).toHaveBeenCalledTimes(1);
+    vi.mocked(auth.service.getIdToken).mockResolvedValueOnce(null);
+    await user.click(google);
+    await vi.waitFor(() => {
+      expect(onAuthChange).toHaveBeenCalledWith(true);
+    });
+    expect(auth.service.signInWithGoogle).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not report success when the server says the session was not opened', async () => {
+    mockFetch({ 'POST /api/admin/login': () => ({ body: { authenticated: false } }) });
+    const onAuthChange = vi.fn();
+    render(
+      <AdminDashboard
+        authenticated={false}
+        issues={[]}
+        onAuthChange={onAuthChange}
+        onUpdated={vi.fn()}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText('Administrator passcode'), 'x');
+    await user.click(screen.getByRole('button', { name: 'Sign in with passcode' }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onAuthChange).not.toHaveBeenCalled();
   });
 });

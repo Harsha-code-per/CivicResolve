@@ -1,95 +1,145 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import axe from 'axe-core';
-import { describe, expect, it, vi } from 'vitest';
-import { App } from '../../src/ui/App.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { App } from '../../src/app/App.js';
 import { baseRoutes, mockFetch, sampleTriage, seedIssues } from './helpers.js';
 
-describe('App shell', () => {
-  it('renders the landing page with live metrics and no axe violations', async () => {
+const go = (hash: string) => {
+  act(() => {
+    window.location.hash = hash;
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+  });
+};
+
+afterEach(() => {
+  window.location.hash = '';
+  localStorage.clear();
+});
+
+describe('landing page', () => {
+  it('shows the hero, live numbers and no axe violations', async () => {
     mockFetch(baseRoutes());
     const { container } = render(<App />);
-    expect(screen.getAllByText('…')).toHaveLength(4);
-    expect(await screen.findByText('4')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/verified resolution/);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/See it resolved/);
+    expect(screen.getAllByText('…').length).toBeGreaterThan(0);
+    expect(await screen.findByText('Reports filed')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText('…')).not.toBeInTheDocument();
+    });
     const results = await axe.run(container);
     expect(results.violations).toEqual([]);
   });
 
-  it('moves between tabs with the arrow, Home and End keys', async () => {
+  it('toggles and remembers the colour theme', async () => {
     mockFetch(baseRoutes());
+    document.documentElement.dataset['theme'] = 'dark';
     render(<App />);
-    const user = userEvent.setup();
-    const overview = screen.getByRole('tab', { name: 'Overview' });
-    overview.focus();
-    await user.keyboard('{ArrowRight}');
-    expect(screen.getByRole('tab', { name: 'Report Issue' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
-    await user.keyboard('{ArrowLeft}');
-    expect(overview).toHaveAttribute('aria-selected', 'true');
-    await user.keyboard('{End}');
-    expect(screen.getByRole('tab', { name: 'Admin Command' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
-    await user.keyboard('{Home}');
-    expect(overview).toHaveAttribute('aria-selected', 'true');
-    await user.keyboard('{ArrowLeft}');
-    expect(screen.getByRole('tab', { name: 'Admin Command' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
-    await user.keyboard('a');
-    expect(screen.getByRole('tab', { name: 'Admin Command' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
-  });
-
-  it('toggles the theme and starts dark when the system prefers it', async () => {
-    mockFetch(baseRoutes());
-    vi.mocked(window.matchMedia).mockReturnValueOnce({ matches: true } as MediaQueryList);
-    render(<App />);
-    expect(document.documentElement.dataset['theme']).toBe('dark');
     await userEvent.click(screen.getByRole('button', { name: 'Dark mode', pressed: true }));
     expect(document.documentElement.dataset['theme']).toBe('light');
+    expect(localStorage.getItem('cr-theme')).toBe('light');
     await userEvent.click(screen.getByRole('button', { name: 'Dark mode', pressed: false }));
     expect(document.documentElement.dataset['theme']).toBe('dark');
   });
 
-  it('shows a load error when the API is unreachable', async () => {
+  it('shows load errors, with a generic message for non-Error failures', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(() => Promise.reject(new Error('Network down'))),
     );
-    render(<App />);
-    expect(await screen.findByRole('alert')).toHaveTextContent('Network down');
-  });
-
-  it('shows a generic load error for non-Error failures and ignores late replies', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(() => Promise.reject(new Error('x'))),
-    );
-    const { unmount } = render(<App />);
-    unmount();
+    const first = render(<App />);
+    expect(await screen.findByText('Network down')).toBeInTheDocument();
+    first.unmount();
     vi.stubGlobal(
       'fetch',
       vi.fn(() => Promise.reject('boom')),
     );
     render(<App />);
-    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load civic issues.');
-    mockFetch(baseRoutes());
-    const second = render(<App />);
-    second.unmount();
+    expect(await screen.findByText('Unable to load civic issues.')).toBeInTheDocument();
   });
 
-  it('adds a submitted complaint to the tracker and an admin update replaces it', async () => {
+  it('ignores replies that arrive after unmounting', async () => {
+    mockFetch(baseRoutes());
+    render(<App />).unmount();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('late'))),
+    );
+    render(<App />).unmount();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByText('late')).not.toBeInTheDocument();
+  });
+});
+
+describe('console', () => {
+  it('renders each section from the URL hash with one h1 and focus on main', async () => {
+    mockFetch(baseRoutes());
+    window.location.hash = '#/dashboard';
+    const { container } = render(<App />);
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'City resolution overview' }),
+    ).toBeVisible();
+    expect(await screen.findByText(/Deep pothole near PSG iTech/)).toBeInTheDocument();
+    expect(document.activeElement).toBe(screen.getByRole('main'));
+    expect((await axe.run(container)).violations).toEqual([]);
+
+    const pages: [string, string][] = [
+      ['#/report', 'Report a civic issue'],
+      ['#/track', 'Live issue tracker'],
+      ['#/mine', 'My reports'],
+      ['#/admin', 'Admin console sign-in'],
+    ];
+    for (const [hash, title] of pages) {
+      go(hash);
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(title);
+      expect(screen.getByRole('link', { current: 'page' })).toBeInTheDocument();
+    }
+    go('#/unknown');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/See it resolved/);
+  });
+
+  it('collapses the sidebar to an icon rail and remembers it', async () => {
+    mockFetch(baseRoutes());
+    window.location.hash = '#/track';
+    const { container } = render(<App />);
+    const toggle = screen.getByRole('button', { name: 'Collapse sidebar' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(container.querySelector('.console')).toHaveAttribute('data-collapsed', 'true');
+    expect(localStorage.getItem('cr-sidebar-collapsed')).toBe('1');
+    expect(screen.getByRole('link', { name: 'Overview' })).toHaveAttribute('title', 'Overview');
+    await userEvent.click(toggle);
+    expect(localStorage.getItem('cr-sidebar-collapsed')).toBe('0');
+  });
+
+  it('opens the mobile drawer and closes it with Escape, the scrim, or a link', async () => {
+    mockFetch(baseRoutes());
+    window.location.hash = '#/track';
+    const { container } = render(<App />);
+    const user = userEvent.setup();
+    const menu = screen.getByRole('button', { name: 'Menu' });
+    const layout = container.querySelector('.console');
+    await user.click(menu);
+    expect(menu).toHaveAttribute('aria-expanded', 'true');
+    await user.keyboard('a');
+    expect(layout).toHaveAttribute('data-drawer', 'true');
+    await user.keyboard('{Escape}');
+    expect(layout).toHaveAttribute('data-drawer', 'false');
+    await user.click(menu);
+    await user.click(container.querySelector<HTMLElement>('.scrim')!);
+    expect(layout).toHaveAttribute('data-drawer', 'false');
+    await user.click(menu);
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Console' })).getByText('Overview'),
+    );
+    expect(layout).toHaveAttribute('data-drawer', 'false');
+  });
+
+  it('files a report, shows it in the tracker, and lets an admin update it', async () => {
     const issues = seedIssues();
     const created = {
-      ...issues[1],
+      ...issues[1]!,
       id: 'CR-2026-1005',
       title: 'Severe waterlogging blocking road',
     };
@@ -100,35 +150,28 @@ describe('App shell', () => {
         body: { issue: { ...created, status: 'in_progress' } },
       }),
     });
+    window.location.hash = '#/report';
     render(<App />);
     const user = userEvent.setup();
-    await screen.findByText('4');
-
-    await user.click(screen.getByRole('tab', { name: 'Report Issue' }));
-    await user.type(screen.getByLabelText('Issue Title'), created.title);
-    await user.type(screen.getByLabelText('Location / Landmark'), 'Peelamedu');
-    await user.type(
-      screen.getByLabelText('Detailed Description'),
-      'Knee-deep flooding across lanes.',
-    );
-    await user.click(screen.getByRole('button', { name: 'Submit Grievance' }));
+    await user.type(screen.getByLabelText('Issue title'), created.title);
+    await user.type(screen.getByLabelText('Location or landmark'), 'Peelamedu');
+    await user.type(screen.getByLabelText('What is wrong?'), 'Knee-deep flooding across lanes.');
+    await user.click(screen.getByRole('button', { name: 'Submit report' }));
     expect(await screen.findByRole('status')).toHaveTextContent('CR-2026-1005');
 
-    await user.click(screen.getByRole('tab', { name: 'Track Issues' }));
+    go('#/track');
     expect(screen.getByText('Showing 5 of 5 grievances (1 resolved).')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('tab', { name: 'Admin Command' }));
+    go('#/admin');
     await user.type(
-      screen.getByLabelText('Resolution / Dispatch Audit Note', { selector: '#note-CR-2026-1005' }),
+      screen.getByLabelText('Audit note (required)', { selector: '#note-CR-2026-1005' }),
       'Crew sent',
     );
     await user.selectOptions(
       screen.getByLabelText('Status', { selector: '#status-CR-2026-1005' }),
       'in_progress',
     );
-    await user.click(screen.getAllByRole('button', { name: 'Save Status Update' })[0]!);
-    await waitFor(() => {
-      expect(screen.getByText('Updated CR-2026-1005 to in_progress.')).toBeInTheDocument();
-    });
+    await user.click(screen.getByRole('button', { name: 'Save update for CR-2026-1005' }));
+    expect(await screen.findByText('Updated CR-2026-1005 to in_progress.')).toBeInTheDocument();
   });
 });

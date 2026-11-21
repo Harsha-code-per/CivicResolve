@@ -23,7 +23,7 @@ export function ResolutionProgress({ analytics }: ResolutionProgressProps): Reac
   const median = analytics.medianResolutionHours;
 
   return (
-    <section className="panel progress-panel" aria-labelledby="progress-heading">
+    <section className="card progress-panel" aria-labelledby="progress-heading">
       <h2 id="progress-heading">Progress toward resolution</h2>
       <dl className="stat-row">
         <div>

@@ -6,10 +6,19 @@ import {
   buildIssueRecord,
   formatIssueId,
 } from '../../src/domain/workflow.js';
-import { SEQUENCE_START, toTransition, type IssueStore, type StoreOptions } from './issues.js';
+import {
+  newestFirst,
+  SEQUENCE_START,
+  toTransition,
+  type IssueStore,
+  type StoreOptions,
+} from './issues.js';
 
 const ISSUES = 'issues';
 const IMAGES = 'issue_images';
+const OWNERS = 'issue_owners';
+/** A citizen's own history is short; this caps one "My reports" read. */
+const MINE_LIMIT = 50;
 const META = 'meta';
 const SEQUENCE_DOC = 'sequence';
 /** The dashboard shows the most recent complaints; older ones stay queryable by id. */
@@ -21,6 +30,10 @@ interface SequenceDoc {
 
 interface ImageDoc {
   readonly dataUrl: string;
+}
+
+interface OwnerDoc {
+  readonly uid: string;
 }
 
 /**
@@ -38,6 +51,7 @@ interface ImageDoc {
 export function createFirestoreIssueStore(db: Firestore, options: StoreOptions = {}): IssueStore {
   const issues = db.collection(ISSUES);
   const images = db.collection(IMAGES);
+  const owners = db.collection(OWNERS);
   const sequenceRef = db.collection(META).doc(SEQUENCE_DOC) as DocumentReference<SequenceDoc>;
   const now = options.now ?? (() => new Date());
   const seed = options.seed ?? createSeedIssues();
@@ -76,7 +90,16 @@ export function createFirestoreIssueStore(db: Firestore, options: StoreOptions =
       return (snapshot.data() as ImageDoc | undefined)?.dataUrl;
     },
 
-    async create(input, triage) {
+    async listByReporter(uid) {
+      const owned = await owners.where('uid', '==', uid).limit(MINE_LIMIT).get();
+      if (owned.empty) return [];
+      const snapshots = await db.getAll(...owned.docs.map((doc) => issueRef(doc.id)));
+      return newestFirst(
+        snapshots.flatMap((doc) => (doc.exists ? [doc.data() as CivicIssue] : [])),
+      );
+    },
+
+    async create(input, triage, reporterUid) {
       await ensureSeeded();
       return db.runTransaction(async (tx) => {
         const current = (await tx.get(sequenceRef)).data()?.value ?? SEQUENCE_START;
@@ -86,6 +109,7 @@ export function createFirestoreIssueStore(db: Firestore, options: StoreOptions =
         tx.set(sequenceRef, { value: sequence });
         tx.set(issueRef(issue.id), issue);
         if (input.imageDataUrl) tx.set(images.doc(issue.id), { dataUrl: input.imageDataUrl });
+        if (reporterUid) tx.set(owners.doc(issue.id), { uid: reporterUid } satisfies OwnerDoc);
         return issue;
       });
     },

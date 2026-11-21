@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { CATEGORY_LABELS } from '../domain/departments.js';
 import type { TriageResult } from '../domain/types.js';
+import { Icon } from './Icon.js';
 
 export interface TriageInspectorProps {
   readonly triage: TriageResult | null;
@@ -14,15 +15,30 @@ export interface TriageInspectorProps {
  */
 export function TriageInspector({ triage }: TriageInspectorProps): ReactElement {
   return (
-    <aside className="panel" aria-live="polite" aria-labelledby="triage-heading">
-      <h2 id="triage-heading">Gemini AI Triage Inspector</h2>
+    <aside className="card triage-card" aria-live="polite" aria-labelledby="triage-heading">
+      <h2 id="triage-heading" className="triage-title">
+        <Icon name="spark" />
+        Gemini triage
+      </h2>
       {triage ? (
         <div>
           <div className="badge-row">
-            <span className={`badge badge-${triage.priority}`}>Priority: {triage.priority}</span>
-            <span className="badge badge-reported">Urgency {triage.urgencyScore}/100</span>
-            <span className="badge badge-low">SLA {triage.slaHours}h</span>
+            <span className={`chip chip-${triage.priority}`}>Priority: {triage.priority}</span>
+            <span className="chip chip-neutral">Urgency {triage.urgencyScore}/100</span>
+            <span className="chip chip-neutral">SLA {triage.slaHours}h</span>
           </div>
+          <meter
+            className="urgency"
+            min={0}
+            max={100}
+            low={35}
+            high={80}
+            optimum={0}
+            value={triage.urgencyScore}
+            aria-label="Urgency score"
+          >
+            {triage.urgencyScore}
+          </meter>
           <p>
             <strong>Category:</strong> {CATEGORY_LABELS[triage.category]}
           </p>
@@ -42,8 +58,8 @@ export function TriageInspector({ triage }: TriageInspectorProps): ReactElement 
         </div>
       ) : (
         <p>
-          Fill out the report and select <strong>Preview AI Triage</strong> to inspect Gemini
-          category detection, urgency scoring, and department recommendation before submitting.
+          Fill in the report and choose <strong>Preview AI triage</strong> to see the category,
+          urgency and department Gemini picks before you file.
         </p>
       )}
     </aside>

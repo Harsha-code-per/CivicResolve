@@ -40,22 +40,27 @@ export function IssueTracker({ issues, analytics, nowMs }: IssueTrackerProps): R
   );
 
   return (
-    <section aria-labelledby="tracker-heading">
-      <div className="issue-header">
-        <h2 id="tracker-heading">Public Issue Tracking Dashboard</h2>
+    <section aria-labelledby="tracker-heading" className="page">
+      <header className="page-head">
+        <div>
+          <p className="kicker">Public record</p>
+          <h1 id="tracker-heading" className="page-title">
+            Live issue tracker
+          </h1>
+        </div>
         <button
           type="button"
-          className="btn"
+          className="btn btn-ghost"
           aria-pressed={showTable}
           onClick={() => {
             setShowTable((prev) => !prev);
           }}
         >
-          {showTable ? 'Switch to Card View' : 'Switch to Accessible Table'}
+          {showTable ? 'Show as cards' : 'Show as table'}
         </button>
-      </div>
+      </header>
 
-      <div className="filters-bar" role="search" aria-label="Filter civic issues">
+      <div className="card filters-bar" role="search" aria-label="Filter civic issues">
         <div className="field">
           <label htmlFor="filter-query">Search ID, title, or location</label>
           <input

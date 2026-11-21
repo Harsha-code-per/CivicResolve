@@ -2,12 +2,13 @@
 
 ## Measured
 
-| What                      | Result                                                                                                  |
-| ------------------------- | ------------------------------------------------------------------------------------------------------- |
-| JavaScript shipped (gzip) | **73.4 kB** in total (React vendor chunk 68 kB, app 7.7 kB), budget 90 kB, enforced by `npm run budget` |
-| CSS shipped (gzip)        | **2.7 kB**, budget 10 kB                                                                                |
-| Runtime dependencies      | 5                                                                                                       |
-| Photo upload              | Downscaled to ≤ 1280 px JPEG in the browser: a 4–8 MB phone photo becomes about 150–300 KB              |
+| What                         | Result                                                                                                         |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| First-load JavaScript (gzip) | **79.6 kB** (React 68 kB + app 14 kB), budget 95 kB, enforced by `npm run budget`                              |
+| Firebase Auth (gzip)         | **45.5 kB**, loaded lazily only when sign-in is configured, never on the critical path; total JS budget 150 kB |
+| CSS shipped (gzip)           | **7.6 kB** including the 3D landing scene, budget 12 kB                                                        |
+| Runtime dependencies         | 9                                                                                                              |
+| Photo upload                 | Downscaled to ≤ 1280 px JPEG in the browser: a 4–8 MB phone photo becomes about 150–300 KB                     |
 
 ## Where the savings come from
 
@@ -28,3 +29,6 @@
 - **Scale to zero.** Cloud Run runs with `min-instances 0`, `max-instances 2` and 512 MiB; the container is
   a multi-stage Alpine image with production dependencies only.
 - **No chart library.** Progress bars are native `<progress>` elements styled with CSS.
+- **No WebGL or 3D library.** The landing city is about 50 `div`s with CSS 3D transforms; it costs no JavaScript beyond rendering and stops animating under reduced motion.
+- **Lazy sign-in.** `@firebase/app` and `@firebase/auth` are dynamically imported after `/api/config` says sign-in is on. Only these two packages are installed, not the full `firebase` SDK, which also keeps `npm audit` at 0.
+- **Fonts.** Self-hosted Geist (variable) and Instrument Serif italic via Fontsource, split by `unicode-range` so only the Latin subset downloads.

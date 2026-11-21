@@ -9,8 +9,17 @@ export const DEFAULT_GEMINI_MODELS = [
 
 export const DEV_ADMIN_PASSCODE = 'civic-admin-2026';
 const DEFAULT_PORT = 8080;
+const DEFAULT_RATE_LIMIT_PER_MINUTE = 60;
 const MIN_SECRET_LENGTH = 32;
 const SECRET_BYTES = 32;
+
+/** Public Firebase web config; these values identify the project and are not secrets. */
+export interface FirebaseWebConfig {
+  readonly apiKey: string;
+  readonly authDomain: string;
+  readonly projectId: string;
+  readonly appId: string;
+}
 
 export interface ServerConfig {
   readonly port: number;
@@ -21,6 +30,10 @@ export interface ServerConfig {
   readonly geminiModels: readonly string[];
   readonly useFirestore: boolean;
   readonly publicOrigin?: string;
+  readonly firebase?: FirebaseWebConfig;
+  readonly adminEmails: readonly string[];
+  /** API requests allowed per client IP per minute. */
+  readonly rateLimitPerMinute: number;
 }
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -71,6 +84,35 @@ function resolveSecrets(
 }
 
 /**
+ * Splits a comma-separated variable into trimmed, non-empty entries.
+ *
+ * @param env - Environment map.
+ * @param key - Variable name.
+ * @returns List of entries (empty when unset).
+ */
+function readList(env: Env, key: string): string[] {
+  return (read(env, key) ?? '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Reads the Firebase web config; all four values are needed to enable sign-in.
+ *
+ * @param env - Environment map.
+ * @returns Firebase config, or undefined when sign-in is not configured.
+ */
+function readFirebase(env: Env): FirebaseWebConfig | undefined {
+  const apiKey = read(env, 'FIREBASE_API_KEY');
+  const authDomain = read(env, 'FIREBASE_AUTH_DOMAIN');
+  const projectId = read(env, 'FIREBASE_PROJECT_ID');
+  const appId = read(env, 'FIREBASE_APP_ID');
+  if (!apiKey || !authDomain || !projectId || !appId) return undefined;
+  return { apiKey, authDomain, projectId, appId };
+}
+
+/**
  * Builds validated server configuration from environment variables.
  *
  * @param env - Environment map, normally process.env.
@@ -80,18 +122,19 @@ export function loadConfig(env: Env): ServerConfig {
   const isProduction = read(env, 'NODE_ENV') === 'production';
   const geminiApiKey = read(env, 'GEMINI_API_KEY');
   const publicOrigin = read(env, 'PUBLIC_ORIGIN');
-  const models = read(env, 'GEMINI_MODELS')
-    ?.split(',')
-    .map((model) => model.trim())
-    .filter(Boolean);
+  const models = readList(env, 'GEMINI_MODELS');
+  const firebase = readFirebase(env);
 
   return {
     port: Number(read(env, 'PORT') ?? DEFAULT_PORT),
+    rateLimitPerMinute: Number(read(env, 'RATE_LIMIT_PER_MINUTE') ?? DEFAULT_RATE_LIMIT_PER_MINUTE),
     isProduction,
     ...resolveSecrets(env, isProduction),
-    geminiModels: models?.length ? models : DEFAULT_GEMINI_MODELS,
+    geminiModels: models.length ? models : DEFAULT_GEMINI_MODELS,
+    adminEmails: readList(env, 'ADMIN_EMAILS').map((email) => email.toLowerCase()),
     useFirestore: read(env, 'FIRESTORE_ENABLED') === 'true',
     ...(geminiApiKey ? { geminiApiKey } : {}),
     ...(publicOrigin ? { publicOrigin } : {}),
+    ...(firebase ? { firebase } : {}),
   };
 }

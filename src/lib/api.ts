@@ -3,6 +3,7 @@ import type {
   CreateIssueInput,
   TriagePreviewInput,
 } from '../domain/schemas.js';
+import type { FirebaseWebConfig } from '../auth/firebase.js';
 import type { CivicIssue, IssueAnalytics, TriageResult } from '../domain/types.js';
 
 export interface IssuesResponse {
@@ -17,14 +18,32 @@ export interface IssuesResponse {
  * @param init - Optional fetch configuration.
  * @returns Parsed JSON response body.
  */
-async function requestJson<T>(
-  url: string,
-  init?: { readonly method: 'POST' | 'PATCH'; readonly body?: string },
-): Promise<T> {
+interface RequestInit {
+  readonly method?: 'POST' | 'PATCH';
+  readonly body?: string;
+  /** Firebase ID token, sent as a bearer credential when present. */
+  readonly token?: string | null;
+}
+
+/**
+ * Builds request headers for a JSON body and an optional bearer token.
+ *
+ * @param init - Request options.
+ * @returns Header map.
+ */
+function headersFor(init: RequestInit): Record<string, string> {
+  return {
+    ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+    ...(init.token ? { Authorization: `Bearer ${init.token}` } : {}),
+  };
+}
+
+async function requestJson<T>(url: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(url, {
     credentials: 'same-origin',
-    ...init,
-    headers: init?.body ? { 'Content-Type': 'application/json' } : {},
+    ...(init.method ? { method: init.method } : {}),
+    ...(init.body ? { body: init.body } : {}),
+    headers: headersFor(init),
   });
 
   const data = (await response.json()) as T & { error?: string };
@@ -61,15 +80,52 @@ export async function previewTriage(input: TriagePreviewInput): Promise<TriageRe
  * Submits a new citizen grievance for AI triage and persistent tracking.
  *
  * @param input - Validated citizen complaint fields.
+ * @param token - The citizen's Firebase ID token, when signed in.
  * @returns Newly created CivicIssue and TriageResult.
  */
 export function submitIssue(
   input: CreateIssueInput,
+  token: string | null,
 ): Promise<{ issue: CivicIssue; triage: TriageResult }> {
   return requestJson<{ issue: CivicIssue; triage: TriageResult }>('/api/issues', {
     method: 'POST',
     body: JSON.stringify(input),
+    token,
   });
+}
+
+/**
+ * Loads the complaints the signed-in citizen has filed.
+ *
+ * @param token - The citizen's Firebase ID token.
+ * @returns The citizen's issues, newest first.
+ */
+export async function fetchMyIssues(token: string): Promise<CivicIssue[]> {
+  const data = await requestJson<{ issues: CivicIssue[] }>('/api/me/issues', { token });
+  return data.issues;
+}
+
+/**
+ * Reads the public client config (Firebase web settings, or null when sign-in is off).
+ *
+ * @returns Client config.
+ */
+export function fetchClientConfig(): Promise<{ firebase: FirebaseWebConfig | null }> {
+  return requestJson<{ firebase: FirebaseWebConfig | null }>('/api/config');
+}
+
+/**
+ * Exchanges an allow-listed Google account's ID token for an admin session.
+ *
+ * @param token - Firebase ID token of a Google-signed-in user.
+ * @returns True on success.
+ */
+export async function loginAdminWithGoogle(token: string): Promise<boolean> {
+  const data = await requestJson<{ authenticated: boolean }>('/api/admin/google', {
+    method: 'POST',
+    token,
+  });
+  return data.authenticated;
 }
 
 /**

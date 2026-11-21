@@ -15,7 +15,10 @@ export interface IssueStore {
   list(): Promise<readonly CivicIssue[]>;
   getById(id: string): Promise<CivicIssue | undefined>;
   getImage(id: string): Promise<string | undefined>;
-  create(input: CreateIssueInput, triage: TriageResult): Promise<CivicIssue>;
+  /** Stores a complaint; the reporter's uid is kept apart from the public record. */
+  create(input: CreateIssueInput, triage: TriageResult, reporterUid?: string): Promise<CivicIssue>;
+  /** The complaints one signed-in citizen has filed, newest first. */
+  listByReporter(uid: string): Promise<readonly CivicIssue[]>;
   update(id: string, input: AdminUpdateIssueInput): Promise<CivicIssue | undefined>;
 }
 
@@ -45,6 +48,16 @@ export function toTransition(
 }
 
 /**
+ * Orders issues newest first by creation time.
+ *
+ * @param issues - Issues in any order.
+ * @returns A new, sorted array.
+ */
+export function newestFirst(issues: readonly CivicIssue[]): CivicIssue[] {
+  return [...issues].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+/**
  * Creates an in-memory issue store, pre-seeded for demos and used by tests and local dev.
  *
  * @param options - Optional seed records and clock.
@@ -53,6 +66,7 @@ export function toTransition(
 export function createMemoryIssueStore(options: StoreOptions = {}): IssueStore {
   const issues = new Map((options.seed ?? createSeedIssues()).map((issue) => [issue.id, issue]));
   const images = new Map<string, string>();
+  const owners = new Map<string, string>();
   const now = options.now ?? (() => new Date());
   let sequence = SEQUENCE_START + issues.size;
 
@@ -61,7 +75,12 @@ export function createMemoryIssueStore(options: StoreOptions = {}): IssueStore {
     getById: (id) => Promise.resolve(issues.get(id)),
     getImage: (id) => Promise.resolve(images.get(id)),
 
-    create(input, triage) {
+    listByReporter(uid) {
+      const mine = [...issues.values()].filter((issue) => owners.get(issue.id) === uid);
+      return Promise.resolve(newestFirst(mine));
+    },
+
+    create(input, triage, reporterUid) {
       sequence += 1;
       const issue = buildIssueRecord({
         id: formatIssueId(sequence),
@@ -71,6 +90,7 @@ export function createMemoryIssueStore(options: StoreOptions = {}): IssueStore {
       });
       issues.set(issue.id, issue);
       if (input.imageDataUrl) images.set(issue.id, input.imageDataUrl);
+      if (reporterUid) owners.set(issue.id, reporterUid);
       return Promise.resolve(issue);
     },
 

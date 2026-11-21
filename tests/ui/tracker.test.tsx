@@ -3,7 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { computeAnalytics } from '../../src/domain/analytics.js';
 import { IssueTracker } from '../../src/ui/IssueTracker.js';
-import { LandingHero } from '../../src/ui/LandingHero.js';
+import { Landing } from '../../src/landing/Landing.js';
+import { Dashboard } from '../../src/ui/Dashboard.js';
 import { ResolutionProgress } from '../../src/ui/ResolutionProgress.js';
 import { TriageInspector } from '../../src/ui/TriageInspector.js';
 import { sampleTriage, seedIssues } from './helpers.js';
@@ -37,10 +38,10 @@ describe('IssueTracker', () => {
     await user.selectOptions(screen.getByLabelText('Department'), 'Water Supply & Drainage Board');
     expect(screen.getByText('Showing 1 of 4 grievances (1 resolved).')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Switch to Accessible Table' }));
+    await user.click(screen.getByRole('button', { name: 'Show as table' }));
     expect(screen.getByRole('table')).toBeInTheDocument();
     expect(screen.getByRole('rowheader', { name: 'CR-2026-1004' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Switch to Card View' }));
+    await user.click(screen.getByRole('button', { name: 'Show as cards' }));
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 
@@ -50,27 +51,49 @@ describe('IssueTracker', () => {
   });
 });
 
-describe('LandingHero and TriageInspector', () => {
-  it('navigates from the hero call-to-action buttons', async () => {
-    const onNavigate = vi.fn();
-    render(
-      <LandingHero
-        analytics={computeAnalytics(seedIssues(), NOW)}
-        onNavigate={onNavigate}
+describe('Dashboard, Landing and TriageInspector', () => {
+  it('shows headline numbers and the latest reports', () => {
+    const issues = seedIssues();
+    const { rerender } = render(
+      <Dashboard issues={issues} analytics={computeAnalytics(issues, NOW)} nowMs={NOW} loading />,
+    );
+    expect(screen.getAllByText('…')).toHaveLength(4);
+    rerender(
+      <Dashboard
+        issues={issues}
+        analytics={computeAnalytics(issues, NOW)}
+        nowMs={NOW}
         loading={false}
       />,
     );
-    const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'Report a Civic Issue' }));
-    await user.click(screen.getByRole('button', { name: 'Explore Live Tracker' }));
-    await user.click(screen.getByRole('button', { name: 'Open Admin Command' }));
-    expect(onNavigate.mock.calls.flat()).toEqual(['report', 'tracker', 'admin']);
+    expect(screen.getByRole('heading', { name: 'Resolution rate' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View all' })).toHaveAttribute('href', '#/track');
+  });
+
+  it('links the landing calls to action into the console', () => {
+    render(
+      <Landing
+        analytics={computeAnalytics(seedIssues(), NOW)}
+        loading={false}
+        theme="light"
+        onToggleTheme={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('link', { name: 'Report an issue' })).toHaveAttribute(
+      'href',
+      '#/report',
+    );
+    expect(screen.getByRole('link', { name: 'Open console' })).toHaveAttribute(
+      'href',
+      '#/dashboard',
+    );
   });
 
   it('explains the empty state and shows the rule engine when no model answered', () => {
     const { rerender } = render(<TriageInspector triage={null} />);
-    expect(screen.getByText(/Preview AI Triage/)).toBeInTheDocument();
+    expect(screen.getByText(/Preview AI triage/)).toBeInTheDocument();
     rerender(<TriageInspector triage={sampleTriage} />);
     expect(screen.getByText('Engine: deterministic')).toBeInTheDocument();
+    expect(screen.getByRole('meter', { name: 'Urgency score' })).toBeInTheDocument();
   });
 });

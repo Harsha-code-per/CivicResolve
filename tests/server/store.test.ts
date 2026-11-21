@@ -3,7 +3,7 @@ import { triageDeterministic } from '../../src/domain/priority.js';
 import { createSeedIssues } from '../../src/domain/seed.js';
 import { InvalidTransitionError } from '../../src/domain/workflow.js';
 import { createFirestoreIssueStore } from '../../server/store/firestore.js';
-import { createMemoryIssueStore, type IssueStore } from '../../server/store/issues.js';
+import { createMemoryIssueStore, newestFirst, type IssueStore } from '../../server/store/issues.js';
 import { createFakeFirestore } from './fake-firestore.js';
 
 const input = {
@@ -40,6 +40,17 @@ describe.each(stores)('%s issue store', (_name, makeStore) => {
     expect(await store.getImage(first.id)).toBe(photo.imageDataUrl);
     expect(await store.getImage(second.id)).toBeUndefined();
     expect((await store.list()).map((issue) => issue.id)).toContain(first.id);
+  });
+
+  it("lists a reporter's own issues, newest first, without exposing the uid", async () => {
+    const store = makeStore();
+    expect(await store.listByReporter('citizen-1')).toEqual([]);
+    const first = await store.create(input, triage, 'citizen-1');
+    await store.create(input, triage, 'citizen-2');
+    await store.create(input, triage);
+    const mine = await store.listByReporter('citizen-1');
+    expect(mine.map((issue) => issue.id)).toEqual([first.id]);
+    expect(first).not.toHaveProperty('reporterUid');
   });
 
   it('applies admin transitions and rejects invalid ones', async () => {
@@ -83,5 +94,22 @@ describe('firestore specifics', () => {
     const store = createMemoryIssueStore();
     const created = await store.create(input, triage);
     expect(Date.parse(created.createdAt)).toBeGreaterThan(0);
+  });
+});
+
+describe('newestFirst and orphaned ownership', () => {
+  it('sorts by creation time and skips owner rows whose issue is gone', async () => {
+    const issues = createSeedIssues();
+    expect(newestFirst(issues).map((issue) => issue.createdAt)).toEqual(
+      issues
+        .map((issue) => issue.createdAt)
+        .sort()
+        .reverse(),
+    );
+    const fake = createFakeFirestore();
+    const store = createFirestoreIssueStore(fake.db, { now: clock });
+    fake.docs.set('issue_owners/CR-2026-0001', { uid: 'ghost' });
+    await store.list();
+    expect(await store.listByReporter('ghost')).toEqual([]);
   });
 });

@@ -14,7 +14,7 @@ interface FakeSnapshot {
 
 /**
  * A tiny in-memory stand-in for the parts of Firestore the store uses:
- * doc get/set, ordered+limited queries, and transactions.
+ * doc get/set, ordered+limited and equality queries, getAll, and transactions.
  */
 export function createFakeFirestore(options: { failTransactions?: number } = {}) {
   const docs = new Map<string, Data>();
@@ -30,8 +30,23 @@ export function createFakeFirestore(options: { failTransactions?: number } = {})
     get: () => Promise.resolve(snapshot(path)),
   });
 
+  const inCollection = (name: string) =>
+    [...docs.entries()].filter(([path]) => path.startsWith(`${name}/`));
+  const toDocs = (rows: [string, Data][]) =>
+    rows.map(([path, data]) => ({ id: path.split('/')[1], data: () => data }));
+
   const collection = (name: string) => ({
     doc: (id: string) => ref(`${name}/${id}`),
+    where: (field: string, _op: '==', value: unknown) => ({
+      limit: (count: number) => ({
+        get: () => {
+          const rows = inCollection(name)
+            .filter(([, data]) => data[field] === value)
+            .slice(0, count);
+          return Promise.resolve({ empty: rows.length === 0, docs: toDocs(rows) });
+        },
+      }),
+    }),
     orderBy: (field: string, direction: 'asc' | 'desc') => ({
       limit: (count: number) => ({
         get: () => {
@@ -50,6 +65,7 @@ export function createFakeFirestore(options: { failTransactions?: number } = {})
 
   const db = {
     collection,
+    getAll: (...refs: FakeRef[]) => Promise.all(refs.map((target) => target.get())),
     async runTransaction<T>(fn: (tx: unknown) => Promise<T>): Promise<T> {
       if (failuresLeft > 0) {
         failuresLeft -= 1;

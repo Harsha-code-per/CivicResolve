@@ -9,6 +9,7 @@ import {
   type MunicipalDepartment,
 } from '../domain/types.js';
 import { updateIssueAsAdmin } from '../lib/api.js';
+import { PRIORITY_LABELS, STATUS_LABELS } from './labels.js';
 
 export interface AdminIssueRowProps {
   readonly issue: CivicIssue;
@@ -44,17 +45,17 @@ export function AdminIssueRow({ issue, onUpdated, onError }: AdminIssueRowProps)
   };
 
   return (
-    <form className="issue-card" onSubmit={(e) => void handleSave(e)}>
+    <form className="card issue-card" onSubmit={(e) => void handleSave(e)}>
       <div className="issue-header">
         <div>
           <span className="issue-id">{issue.id}</span>
           <h3>{issue.title}</h3>
           <p>{issue.location}</p>
         </div>
-        <span className={`badge badge-${issue.priority}`}>{issue.priority}</span>
+        <span className={`chip chip-${issue.priority}`}>{PRIORITY_LABELS[issue.priority]}</span>
       </div>
 
-      <div className="filters-bar">
+      <div className="admin-fields">
         <div className="field">
           <label htmlFor={`status-${issue.id}`}>Status</label>
           <select
@@ -66,7 +67,7 @@ export function AdminIssueRow({ issue, onUpdated, onError }: AdminIssueRowProps)
           >
             {ISSUE_STATUSES.map((st) => (
               <option key={st} value={st}>
-                {st}
+                {STATUS_LABELS[st]}
               </option>
             ))}
           </select>
@@ -82,7 +83,7 @@ export function AdminIssueRow({ issue, onUpdated, onError }: AdminIssueRowProps)
           >
             {ISSUE_PRIORITIES.map((prio) => (
               <option key={prio} value={prio}>
-                {prio}
+                {PRIORITY_LABELS[prio]}
               </option>
             ))}
           </select>
@@ -106,7 +107,7 @@ export function AdminIssueRow({ issue, onUpdated, onError }: AdminIssueRowProps)
       </div>
 
       <div className="field">
-        <label htmlFor={`note-${issue.id}`}>Resolution / Dispatch Audit Note</label>
+        <label htmlFor={`note-${issue.id}`}>Audit note (required)</label>
         <input
           id={`note-${issue.id}`}
           required
@@ -119,7 +120,7 @@ export function AdminIssueRow({ issue, onUpdated, onError }: AdminIssueRowProps)
       </div>
 
       <button type="submit" className="btn btn-primary" disabled={saving}>
-        {saving ? 'Updating...' : 'Save Status Update'}
+        {saving ? 'Saving…' : `Save update for ${issue.id}`}
       </button>
     </form>
   );

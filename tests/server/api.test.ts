@@ -9,6 +9,7 @@ import { createAiTriageClient } from '../../server/ai/triage.js';
 import { createApp, type AppDependencies } from '../../server/app.js';
 import { serveStaticAsset } from '../../server/lib/http.js';
 import { createRateLimiter } from '../../server/lib/rate-limit.js';
+import type { CitizenIdentity } from '../../server/lib/identity.js';
 import { createMemoryIssueStore, type IssueStore } from '../../server/store/issues.js';
 import { PNG } from './fixtures.js';
 
@@ -150,6 +151,68 @@ describe('admin API', () => {
 
     const logout = await post(`${base}/api/admin/logout`, {});
     expect(logout.headers.get('set-cookie')).toContain('Max-Age=0');
+  });
+});
+
+describe('citizen accounts (Firebase ID tokens)', () => {
+  const identities: Record<string, CitizenIdentity> = {
+    'guest-token': { uid: 'guest-1', emailVerified: false, anonymous: true },
+    'admin-token': {
+      uid: 'admin-1',
+      email: 'ops@city.gov',
+      emailVerified: true,
+      anonymous: false,
+    },
+  };
+  const firebase = { apiKey: 'k', authDomain: 'd', projectId: 'p', appId: 'a' };
+  const withAuth = () =>
+    boot({
+      firebase,
+      adminEmails: ['ops@city.gov'],
+      verifyIdentity: (token) => Promise.resolve(identities[token]),
+    });
+  const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
+
+  it('serves the public client config', async () => {
+    const base = await withAuth();
+    expect(await (await fetch(`${base}/api/config`)).json()).toEqual({ firebase });
+    const open = await boot();
+    expect(await (await fetch(`${open}/api/config`)).json()).toEqual({ firebase: null });
+  });
+
+  it("requires an account to file, then lists only that citizen's reports", async () => {
+    const base = await withAuth();
+    expect((await post(`${base}/api/issues`, complaint)).status).toBe(401);
+    expect((await post(`${base}/api/issues`, complaint, bearer('forged'))).status).toBe(401);
+    const created = await post(`${base}/api/issues`, complaint, bearer('guest-token'));
+    expect(created.status).toBe(201);
+    const { issue } = (await created.json()) as { issue: { id: string } };
+    expect(issue).not.toHaveProperty('reporterUid');
+
+    expect((await fetch(`${base}/api/me/issues`)).status).toBe(401);
+    const mine = await fetch(`${base}/api/me/issues`, { headers: bearer('guest-token') });
+    expect(((await mine.json()) as { issues: { id: string }[] }).issues.map((i) => i.id)).toEqual([
+      issue.id,
+    ]);
+    const other = await fetch(`${base}/api/me/issues`, { headers: bearer('admin-token') });
+    expect(await other.json()).toEqual({ issues: [] });
+  });
+
+  it('records the reporter when a token is sent even if sign-in is optional', async () => {
+    const store = createMemoryIssueStore();
+    const base = await boot({ store });
+    expect((await post(`${base}/api/issues`, complaint, bearer('ignored'))).status).toBe(201);
+    expect(await store.listByReporter('ignored')).toEqual([]);
+  });
+
+  it('opens an admin session only for allow-listed, verified Google accounts', async () => {
+    const base = await withAuth();
+    expect((await post(`${base}/api/admin/google`, {}, bearer('guest-token'))).status).toBe(403);
+    const ok = await post(`${base}/api/admin/google`, {}, bearer('admin-token'));
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get('set-cookie')).toContain('HttpOnly');
+    const open = await boot();
+    expect((await post(`${open}/api/admin/google`, {}, bearer('admin-token'))).status).toBe(403);
   });
 });
 

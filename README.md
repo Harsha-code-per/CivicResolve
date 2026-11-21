@@ -11,10 +11,20 @@ then moves through a public, auditable pipeline from _Reported_ to _In Progress_
 ![WCAG 2.2 AA](https://img.shields.io/badge/WCAG-2.2%20AA-0b6d96)
 
 **Live app (Google Cloud Run):** https://civicresolve-63601254635.asia-south1.run.app
-Demo admin passcode: `civic-admin-2026`
+
+- Citizens: sign in with **Google** or **Continue as guest** (one click), then report and follow issues
+  under **My reports**.
+- Admin console: demo passcode `civic-admin-2026` (or an allow-listed Google account).
 
 **Stack:** React 19, TypeScript (strict), Vite, Node 22 on **Cloud Run**, **Google Gemini**
-(`@google/genai`), **Cloud Firestore**, zod.
+(`@google/genai`), **Cloud Firestore**, **Firebase Authentication**, zod, jose.
+
+## What you will see
+
+- **Landing page:** a CSS-3D isometric city whose report pins change colour from Reported to
+  Resolved, live numbers from Firestore, how it works, how Gemini is kept honest, and the live pipeline.
+- **Console** with a **collapsible sidebar** (icon rail on desktop, drawer on phones):
+  Overview, Report an issue, Live tracker, My reports and Admin console, in light and dark themes.
 
 ## The challenge, mapped to the product
 
@@ -25,9 +35,10 @@ Demo admin passcode: `civic-admin-2026`
 | **Priority detection**        | Gemini proposes a priority by danger to life and public impact; a deterministic engine scores urgency (10–100) and sets a **safety floor**, so the model can raise a priority but never downgrade a hazard such as an exposed live wire. Each priority carries an SLA. |
 | **Department recommendation** | Each category maps to one of six municipal departments, and admins can reassign.                                                                                                                                                                                       |
 | **Issue tracking dashboard**  | Search and filter by status, priority and department; cards or an accessible table; a timestamped status history; a live SLA countdown ("Due in 5h", "Overdue by 3h").                                                                                                 |
-| **Admin dashboard**           | Passcode sign-in with an HMAC-signed HttpOnly cookie, then update status, priority and department with a required audit note. Invalid transitions (for example _Resolved → Reported_) are rejected.                                                                    |
+| **Admin dashboard**           | Sign in with an allow-listed Google account or the passcode; either opens an HMAC-signed HttpOnly session. Then update status, priority and department with a required audit note. Invalid transitions (for example _Resolved → Reported_) are rejected.               |
+| **Citizen accounts**          | Firebase Authentication with Google or a one-click guest account. The server verifies each ID token itself (signature, issuer, audience, expiry). **My reports** shows each of your complaints with a Reported → In Progress → Resolved stepper.                       |
 | **Visualise progress**        | A _Progress toward resolution_ panel: resolution rate, issues open past their SLA, median time to resolve, the status pipeline, and each department's resolved share.                                                                                                  |
-| **Gemini + Google Cloud**     | Gemini for triage, Cloud Run for hosting, Firestore for storage. Without a key the app still works on its rule engine, and it always shows which engine triaged an issue.                                                                                              |
+| **Gemini + Google Cloud**     | Gemini for triage, Cloud Run for hosting, Firestore for storage, Firebase Authentication for accounts. Without a key the app still works on its rule engine, and it always shows which engine triaged an issue.                                                        |
 
 ## How Gemini is used, and kept honest
 
@@ -50,8 +61,9 @@ CivicResolve follows one rule: **the engine owns the rules, Gemini owns the unde
 
 ```mermaid
 flowchart LR
-  C[Citizen] -->|text + photo| API[/POST /api/issues/]
-  API --> V[zod + magic-byte checks]
+  C[Citizen] -->|Google or guest sign-in| FA[Firebase Auth]
+  C -->|text + photo + ID token| API[/POST /api/issues/]
+  API --> V[verify ID token, zod, magic bytes]
   V --> R[Rule engine<br/>urgency, SLA]
   V --> G{Gemini cascade}
   G -->|schema-valid JSON| M[reconcileTriage<br/>safety floor]
@@ -64,14 +76,14 @@ flowchart LR
 
 ## Evaluation map
 
-| Criterion             | Where to look                                                                                                                                                                                                                                                                                                                     |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Code quality**      | [`CODE_QUALITY.md`](CODE_QUALITY.md). Pure domain layer, a storage port with two adapters, a route table (`server/routes.ts`) so each endpoint is a few lines, DI for the AI models and clocks. ESLint `strictTypeChecked` + jsx-a11y strict with complexity ≤ 8, ≤ 3 params, ≤ 200 lines per file, JSDoc on exports, knip.       |
-| **Security**          | [`SECURITY.md`](SECURITY.md). Strict CSP (no inline script or style), HSTS, COOP/CORP, same-origin checks on mutations, per-IP rate limit (spoof-resistant), body caps, zod on every input, magic-byte image checks, timing-safe HMAC sessions, prompt-injection fencing, fail-fast production config, `npm audit` clean, CodeQL. |
-| **Efficiency**        | [`EFFICIENCY.md`](EFFICIENCY.md). 73 kB gzip of JS in total (zod kept out of the browser), photos downscaled to about 200 KB before upload and served lazily from their own endpoint with immutable caching, a triage cache, model cooldowns, Firestore list limit, scale-to-zero Cloud Run.                                      |
-| **Testing**           | [`TESTING.md`](TESTING.md). 77 Vitest tests at **100% statements, branches, functions and lines** (enforced), including property tests, a fake Firestore, a mocked Gemini SDK and axe in jsdom. 12 Playwright runs (4 journeys × desktop light, desktop dark, mobile) with axe WCAG 2.2 AA under the production CSP.              |
-| **Accessibility**     | [`ACCESSIBILITY.md`](ACCESSIBILITY.md). Skip link, landmarks, WAI-ARIA tabs with roving focus, focused error alerts, live regions, native `<progress>` bars with text values, a table alternative, colour plus text for every status, reduced motion and both colour schemes.                                                     |
-| **Problem alignment** | The table above, plus [`PROBLEM_ALIGNMENT.md`](PROBLEM_ALIGNMENT.md), which traces each requirement to code and tests.                                                                                                                                                                                                            |
+| Criterion             | Where to look                                                                                                                                                                                                                                                                                                                                                                                                            |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Code quality**      | [`CODE_QUALITY.md`](CODE_QUALITY.md). Pure domain layer, a storage port with two adapters, a route table (`server/routes.ts`) so each endpoint is a few lines, DI for the AI models and clocks. ESLint `strictTypeChecked` + jsx-a11y strict with complexity ≤ 8, ≤ 3 params, ≤ 200 lines per file, JSDoc on exports, knip.                                                                                              |
+| **Security**          | [`SECURITY.md`](SECURITY.md). Server-side Firebase ID-token verification, reporter identity kept off public records, strict CSP (no inline script or style), HSTS, COOP/CORP, same-origin checks on mutations, per-IP rate limit (spoof-resistant), body caps, zod on every input, magic-byte image checks, timing-safe HMAC sessions, prompt-injection fencing, fail-fast production config, `npm audit` clean, CodeQL. |
+| **Efficiency**        | [`EFFICIENCY.md`](EFFICIENCY.md). 79.6 kB gzip first-load JS (zod kept out of the browser, Firebase Auth lazy-loaded), a CSS-only 3D scene, photos downscaled to about 200 KB before upload and served lazily from their own endpoint with immutable caching, a triage cache, model cooldowns, Firestore list limit, scale-to-zero Cloud Run.                                                                            |
+| **Testing**           | [`TESTING.md`](TESTING.md). 108 Vitest tests at **100% statements, branches, functions and lines** (enforced), including property tests, real RS256 tokens for identity checks, a fake Firestore, mocked Gemini and Firebase SDKs and axe in jsdom. 15 Playwright runs (5 journeys × desktop light, desktop dark, mobile) with axe WCAG 2.2 AA under the production CSP.                                                 |
+| **Accessibility**     | [`ACCESSIBILITY.md`](ACCESSIBILITY.md). Skip links, landmarks, a sidebar of real links with `aria-current`, focus moved to `<main>` on navigation, an accessible collapsible sidebar and mobile drawer, focused error alerts, live regions, native `<progress>` bars with text values, a table alternative, colour plus text for every status, reduced motion and both colour schemes.                                   |
+| **Problem alignment** | The table above, plus [`PROBLEM_ALIGNMENT.md`](PROBLEM_ALIGNMENT.md), which traces each requirement to code and tests.                                                                                                                                                                                                                                                                                                   |
 
 ## Run it locally
 
@@ -103,7 +115,13 @@ gcloud run deploy civicresolve --source . --region asia-south1 --allow-unauthent
   --max-instances 2 --memory 512Mi \
   --set-env-vars NODE_ENV=production,FIRESTORE_ENABLED=true,ADMIN_PASSCODE=civic-admin-2026,SESSION_SECRET=$(openssl rand -hex 32) \
   --set-secrets GEMINI_API_KEY=gemini-api-key:latest
+# Sign-in: add the Firebase web-app values (and optionally ADMIN_EMAILS)
+gcloud run services update civicresolve --region asia-south1 --update-env-vars \
+  FIREBASE_API_KEY=...,FIREBASE_AUTH_DOMAIN=<project>.firebaseapp.com,FIREBASE_PROJECT_ID=<project>,FIREBASE_APP_ID=...
 ```
+
+Enable the **Google** and **Anonymous** providers in Firebase Authentication and add the Cloud Run
+domain to its authorised domains.
 
 The service account needs `roles/run.builder` (source builds), `roles/datastore.user` (Firestore) and
 `roles/secretmanager.secretAccessor` (the Gemini key). A demo stays inside the Cloud Run, Firestore and
@@ -113,12 +131,16 @@ Secret Manager free tiers.
 
 ```
 src/domain/   pure engine: types, schemas, priority + safety floor, SLA, workflow, analytics, seed data
-src/ui/       React views: report form, triage inspector, tracker, progress panel, admin dashboard
+src/app/      shell: hash routes, shared hooks, console layout, collapsible sidebar
+src/auth/     AuthService port + lazy Firebase Auth implementation, AuthProvider
+src/landing/  landing page and the CSS-3D city
+src/ui/       React views: overview, report form, triage inspector, tracker, my reports, admin
 src/lib/      browser API client and photo downscaling
 server/       Node HTTP server: config, route table, request pipeline
 server/ai/    Gemini model adapter, fenced prompts, triage cascade
 server/store/ storage port, in-memory and Firestore adapters
-server/lib/   auth, HTTP helpers, image validation, rate limiting, security headers
+server/routes/ public and admin endpoints with shared helpers
+server/lib/   admin session, Firebase ID-token verification, HTTP helpers, image validation, rate limiting, security headers
 tests/        domain, server, ui and architecture tests
 e2e/          Playwright journeys with axe
 docs/         architecture and decision records

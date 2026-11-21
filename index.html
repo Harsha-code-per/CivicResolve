@@ -3,14 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CivicResolve: report it, route it, see it resolved</title>
     <meta
       name="description"
-      content="CivicResolve — AI-powered citizen grievance reporting, Gemini triage, department routing, and transparent resolution tracking."
+      content="Report potholes, broken streetlights, garbage and leaks with a photo. Google Gemini triages each complaint to the right department and you follow it to resolution."
     />
-    <title>CivicResolve — AI Citizen Grievance Platform</title>
+    <meta name="theme-color" content="#f4f2ed" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b0d12" media="(prefers-color-scheme: dark)" />
+    <meta property="og:title" content="CivicResolve" />
+    <meta property="og:description" content="Report it. Route it. See it resolved." />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script src="/theme.js"></script>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <main>
+        <h1>CivicResolve</h1>
+        <p>CivicResolve needs JavaScript to report and track civic issues.</p>
+      </main>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
