@@ -17,9 +17,9 @@ export interface IssueTableProps {
 export function IssueTable({ issues, nowMs }: IssueTableProps): ReactElement {
   return (
     // Focusable so keyboard users can scroll the table horizontally on small screens.
-    <div className="panel table-scroll" role="region" aria-label="Civic issues table" tabIndex={0}>
+    <div className="table-scroll" role="region" aria-label="Civic issues table" tabIndex={0}>
       <table className="data-table">
-        <caption className="visually-hidden">Civic issues with status and SLA</caption>
+        <caption className="sr-only">Civic issues with status and SLA</caption>
         <thead>
           <tr>
             <th scope="col">ID</th>

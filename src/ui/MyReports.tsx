@@ -41,12 +41,46 @@ function useMyIssues(
 }
 
 /**
- * The citizen's own reports with a progress stepper and SLA countdown for each.
+ * The citizen's reports, each with its SLA and a progress stepper.
  *
- * @param props - Current time and a counter that changes when a report is filed.
- * @returns My reports page.
+ * @param props - Issues and the current time.
+ * @returns List of report cards.
  */
-export function MyReports({
+function MineList({
+  issues,
+  nowMs,
+}: {
+  readonly issues: readonly CivicIssue[];
+  readonly nowMs: number;
+}): ReactElement {
+  return (
+    <ul className="mine-list">
+      {issues.map((issue) => (
+        <li key={issue.id} className="card mine-card">
+          <div className="card-head">
+            <div>
+              <span className="issue-id">{issue.id}</span>
+              <h2>{issue.title}</h2>
+              <p className="muted">
+                {issue.location} · {issue.department}
+              </p>
+            </div>
+            <span className="chip chip-neutral">{describeSla(issue, nowMs)}</span>
+          </div>
+          <StatusStepper status={issue.status} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Picks what to show: setup notice, session check, sign-in, error, loading, empty or the list.
+ *
+ * @param props - Current time and refresh counter.
+ * @returns Page body.
+ */
+function MyReportsBody({
   nowMs,
   refreshKey,
 }: {
@@ -55,55 +89,45 @@ export function MyReports({
 }): ReactElement {
   const auth = useAuth();
   const { issues, error } = useMyIssues(auth.user?.uid, auth.getIdToken, refreshKey);
-
-  const body = (): ReactElement => {
-    if (auth.status === 'disabled') {
-      return (
-        <p className="empty">Sign-in is not configured on this server, so reports are anonymous.</p>
-      );
-    }
-    if (auth.status === 'loading') return <p className="empty">Checking your session…</p>;
-    if (!auth.user) {
-      return (
-        <SignInCard reason="Sign in to see the reports you have filed and follow them to resolution." />
-      );
-    }
-    if (error) {
-      return (
-        <p role="alert" className="alert">
-          {error}
-        </p>
-      );
-    }
-    if (!issues) return <p className="empty">Loading your reports…</p>;
-    if (issues.length === 0) {
-      return (
-        <p className="empty">
-          You have not filed a report yet. <a href={hrefFor('report')}>Report an issue</a>.
-        </p>
-      );
-    }
+  if (auth.status === 'disabled') {
     return (
-      <ul className="mine-list">
-        {issues.map((issue) => (
-          <li key={issue.id} className="card mine-card">
-            <div className="card-head">
-              <div>
-                <span className="issue-id">{issue.id}</span>
-                <h2>{issue.title}</h2>
-                <p className="muted">
-                  {issue.location} · {issue.department}
-                </p>
-              </div>
-              <span className="chip chip-neutral">{describeSla(issue, nowMs)}</span>
-            </div>
-            <StatusStepper status={issue.status} />
-          </li>
-        ))}
-      </ul>
+      <p className="empty">Sign-in is not configured on this server, so reports are anonymous.</p>
     );
-  };
+  }
+  if (auth.status === 'loading') return <p className="empty">Checking your session…</p>;
+  if (!auth.user) {
+    return (
+      <SignInCard reason="Sign in to see the reports you have filed and follow them to resolution." />
+    );
+  }
+  if (error) {
+    return (
+      <p role="alert" className="alert">
+        {error}
+      </p>
+    );
+  }
+  if (!issues) return <p className="empty">Loading your reports…</p>;
+  if (issues.length === 0) {
+    return (
+      <p className="empty">
+        You have not filed a report yet. <a href={hrefFor('report')}>Report an issue</a>.
+      </p>
+    );
+  }
+  return <MineList issues={issues} nowMs={nowMs} />;
+}
 
+/**
+ * The citizen's own reports with a progress stepper and SLA countdown for each.
+ *
+ * @param props - Current time and a counter that changes when a report is filed.
+ * @returns My reports page.
+ */
+export function MyReports(props: {
+  readonly nowMs: number;
+  readonly refreshKey: number;
+}): ReactElement {
   return (
     <section aria-labelledby="mine-title" className="page">
       <header className="page-head">
@@ -114,7 +138,7 @@ export function MyReports({
           </h1>
         </div>
       </header>
-      {body()}
+      <MyReportsBody {...props} />
     </section>
   );
 }

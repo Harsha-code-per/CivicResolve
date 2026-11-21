@@ -9,7 +9,8 @@ import {
   type MunicipalDepartment,
 } from '../domain/types.js';
 import { updateIssueAsAdmin } from '../lib/api.js';
-import { PRIORITY_LABELS, STATUS_LABELS } from './labels.js';
+import { asIs, PRIORITY_LABELS, STATUS_LABELS } from './labels.js';
+import { SelectField, toOptions } from './SelectField.js';
 
 export interface AdminIssueRowProps {
   readonly issue: CivicIssue;
@@ -17,8 +18,63 @@ export interface AdminIssueRowProps {
   readonly onError: (msg: string) => void;
 }
 
+const STATUS_OPTIONS = toOptions(ISSUE_STATUSES, (status) => STATUS_LABELS[status]);
+const PRIORITY_OPTIONS = toOptions(ISSUE_PRIORITIES, (priority) => PRIORITY_LABELS[priority]);
+const DEPARTMENT_OPTIONS = toOptions(MUNICIPAL_DEPARTMENTS, asIs);
+
 /**
- * Renders an individual editable grievance card inside the Admin Command Center.
+ * The issue's reference, title, location and current priority.
+ *
+ * @param props - Issue record.
+ * @returns Header element.
+ */
+function RowHeader({ issue }: { readonly issue: CivicIssue }): ReactElement {
+  return (
+    <div className="issue-header">
+      <div>
+        <span className="issue-id">{issue.id}</span>
+        <h3>{issue.title}</h3>
+        <p>{issue.location}</p>
+      </div>
+      <span className={`chip chip-${issue.priority}`}>{PRIORITY_LABELS[issue.priority]}</span>
+    </div>
+  );
+}
+
+/**
+ * The required audit note recorded with every admin change.
+ *
+ * @param props - Input id, current text and change callback.
+ * @returns Field element.
+ */
+function AuditNote({
+  id,
+  value,
+  onChange,
+}: {
+  readonly id: string;
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+}): ReactElement {
+  return (
+    <div className="field">
+      <label htmlFor={id}>Audit note (required)</label>
+      <input
+        id={id}
+        required
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+        }}
+        placeholder="e.g., Crew dispatched to repair site"
+      />
+    </div>
+  );
+}
+
+/**
+ * One editable issue in the admin queue: status, priority, department and a required
+ * audit note.
  *
  * @param props - Issue record and update/error callbacks.
  * @returns AdminIssueRow element.
@@ -46,78 +102,33 @@ export function AdminIssueRow({ issue, onUpdated, onError }: AdminIssueRowProps)
 
   return (
     <form className="card issue-card" onSubmit={(e) => void handleSave(e)}>
-      <div className="issue-header">
-        <div>
-          <span className="issue-id">{issue.id}</span>
-          <h3>{issue.title}</h3>
-          <p>{issue.location}</p>
-        </div>
-        <span className={`chip chip-${issue.priority}`}>{PRIORITY_LABELS[issue.priority]}</span>
-      </div>
+      <RowHeader issue={issue} />
 
       <div className="admin-fields">
-        <div className="field">
-          <label htmlFor={`status-${issue.id}`}>Status</label>
-          <select
-            id={`status-${issue.id}`}
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value as IssueStatus);
-            }}
-          >
-            {ISSUE_STATUSES.map((st) => (
-              <option key={st} value={st}>
-                {STATUS_LABELS[st]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor={`priority-${issue.id}`}>Priority</label>
-          <select
-            id={`priority-${issue.id}`}
-            value={priority}
-            onChange={(e) => {
-              setPriority(e.target.value as IssuePriority);
-            }}
-          >
-            {ISSUE_PRIORITIES.map((prio) => (
-              <option key={prio} value={prio}>
-                {PRIORITY_LABELS[prio]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor={`dept-${issue.id}`}>Department</label>
-          <select
-            id={`dept-${issue.id}`}
-            value={department}
-            onChange={(e) => {
-              setDepartment(e.target.value as MunicipalDepartment);
-            }}
-          >
-            {MUNICIPAL_DEPARTMENTS.map((dept) => (
-              <option key={dept} value={dept}>
-                {dept}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <div className="field">
-        <label htmlFor={`note-${issue.id}`}>Audit note (required)</label>
-        <input
-          id={`note-${issue.id}`}
-          required
-          value={note}
-          onChange={(e) => {
-            setNote(e.target.value);
-          }}
-          placeholder="e.g., Crew dispatched to repair site"
+        <SelectField
+          id={`status-${issue.id}`}
+          label="Status"
+          value={status}
+          options={STATUS_OPTIONS}
+          onChange={setStatus}
+        />
+        <SelectField
+          id={`priority-${issue.id}`}
+          label="Priority"
+          value={priority}
+          options={PRIORITY_OPTIONS}
+          onChange={setPriority}
+        />
+        <SelectField
+          id={`dept-${issue.id}`}
+          label="Department"
+          value={department}
+          options={DEPARTMENT_OPTIONS}
+          onChange={setDepartment}
         />
       </div>
+
+      <AuditNote id={`note-${issue.id}`} value={note} onChange={setNote} />
 
       <button type="submit" className="btn btn-primary" disabled={saving}>
         {saving ? 'Saving…' : `Save update for ${issue.id}`}

@@ -5,13 +5,12 @@ import {
   MUNICIPAL_DEPARTMENTS,
   type CivicIssue,
   type IssueAnalytics,
-  type IssuePriority,
-  type IssueStatus,
-  type MunicipalDepartment,
+  type IssueFilters,
 } from '../domain/types.js';
 import { filterAndSortIssues } from '../domain/workflow.js';
-import { PRIORITY_LABELS, STATUS_LABELS } from './labels.js';
+import { asIs, PRIORITY_LABELS, STATUS_LABELS } from './labels.js';
 import { ResolutionProgress } from './ResolutionProgress.js';
+import { SelectField, toOptions, type SelectOption } from './SelectField.js';
 import { IssueCard } from './tracker/IssueCard.js';
 import { IssueTable } from './tracker/IssueTable.js';
 
@@ -21,23 +20,106 @@ export interface IssueTrackerProps {
   readonly nowMs: number;
 }
 
+type Facet<T extends string> = T | 'all';
+type Filters = Required<IssueFilters>;
+
+const NO_FILTERS: Filters = { query: '', status: 'all', priority: 'all', department: 'all' };
+
 /**
- * Renders the public Issue Tracking Dashboard with search, filters, status timelines, and table view.
+ * Prepends an "All …" option to a facet's options.
+ *
+ * @param allLabel - Label for the unfiltered choice.
+ * @param options - Facet options.
+ * @returns Options including "all".
+ */
+function withAll<T extends string>(
+  allLabel: string,
+  options: SelectOption<T>[],
+): SelectOption<Facet<T>>[] {
+  return [{ value: 'all', label: allLabel }, ...options];
+}
+
+const STATUS_OPTIONS = withAll(
+  'All statuses',
+  toOptions(ISSUE_STATUSES, (status) => STATUS_LABELS[status]),
+);
+const PRIORITY_OPTIONS = withAll(
+  'All priorities',
+  toOptions(ISSUE_PRIORITIES, (priority) => PRIORITY_LABELS[priority]),
+);
+const DEPARTMENT_OPTIONS = withAll('All departments', toOptions(MUNICIPAL_DEPARTMENTS, asIs));
+
+/**
+ * Free-text search plus status, priority and department facets.
+ *
+ * @param props - Current filters and change callback.
+ * @returns Search region.
+ */
+function TrackerFilters({
+  filters,
+  onChange,
+}: {
+  readonly filters: Filters;
+  readonly onChange: (filters: Filters) => void;
+}): ReactElement {
+  const set = (patch: Partial<Filters>): void => {
+    onChange({ ...filters, ...patch });
+  };
+  return (
+    <div className="card filters-bar" role="search" aria-label="Filter civic issues">
+      <div className="field">
+        <label htmlFor="filter-query">Search ID, title, or location</label>
+        <input
+          id="filter-query"
+          value={filters.query}
+          onChange={(e) => {
+            set({ query: e.target.value });
+          }}
+          placeholder="e.g., pothole, CR-2026-1001"
+        />
+      </div>
+      <SelectField
+        id="filter-status"
+        label="Status"
+        value={filters.status}
+        options={STATUS_OPTIONS}
+        onChange={(status) => {
+          set({ status });
+        }}
+      />
+      <SelectField
+        id="filter-priority"
+        label="Priority"
+        value={filters.priority}
+        options={PRIORITY_OPTIONS}
+        onChange={(priority) => {
+          set({ priority });
+        }}
+      />
+      <SelectField
+        id="filter-dept"
+        label="Department"
+        value={filters.department}
+        options={DEPARTMENT_OPTIONS}
+        onChange={(department) => {
+          set({ department });
+        }}
+      />
+    </div>
+  );
+}
+
+/**
+ * Public tracker: search and facet filters, resolution progress, and cards or a table.
  *
  * @param props - Civic issues, aggregated analytics and the current time.
  * @returns IssueTracker element.
  */
 export function IssueTracker({ issues, analytics, nowMs }: IssueTrackerProps): ReactElement {
-  const [query, setQuery] = useState('');
-  const [status, setStatus] = useState<IssueStatus | 'all'>('all');
-  const [priority, setPriority] = useState<IssuePriority | 'all'>('all');
-  const [department, setDepartment] = useState<MunicipalDepartment | 'all'>('all');
+  const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [showTable, setShowTable] = useState(false);
 
-  const visibleIssues = useMemo(
-    () => filterAndSortIssues(issues, { query, status, priority, department }),
-    [issues, query, status, priority, department],
-  );
+  const visibleIssues = useMemo(() => filterAndSortIssues(issues, filters), [issues, filters]);
 
   return (
     <section aria-labelledby="tracker-heading" className="page">
@@ -60,70 +142,7 @@ export function IssueTracker({ issues, analytics, nowMs }: IssueTrackerProps): R
         </button>
       </header>
 
-      <div className="card filters-bar" role="search" aria-label="Filter civic issues">
-        <div className="field">
-          <label htmlFor="filter-query">Search ID, title, or location</label>
-          <input
-            id="filter-query"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-            }}
-            placeholder="e.g., pothole, CR-2026-1001"
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="filter-status">Status</label>
-          <select
-            id="filter-status"
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value as IssueStatus | 'all');
-            }}
-          >
-            <option value="all">All statuses</option>
-            {ISSUE_STATUSES.map((st) => (
-              <option key={st} value={st}>
-                {STATUS_LABELS[st]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="filter-priority">Priority</label>
-          <select
-            id="filter-priority"
-            value={priority}
-            onChange={(e) => {
-              setPriority(e.target.value as IssuePriority | 'all');
-            }}
-          >
-            <option value="all">All priorities</option>
-            {ISSUE_PRIORITIES.map((prio) => (
-              <option key={prio} value={prio}>
-                {PRIORITY_LABELS[prio]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="filter-dept">Department</label>
-          <select
-            id="filter-dept"
-            value={department}
-            onChange={(e) => {
-              setDepartment(e.target.value as MunicipalDepartment | 'all');
-            }}
-          >
-            <option value="all">All departments</option>
-            {MUNICIPAL_DEPARTMENTS.map((dept) => (
-              <option key={dept} value={dept}>
-                {dept}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+      <TrackerFilters filters={filters} onChange={setFilters} />
 
       <ResolutionProgress analytics={analytics} />
 

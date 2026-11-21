@@ -16,6 +16,73 @@ const messageOf = (err: unknown, fallback: string): string =>
   err instanceof Error ? err.message : fallback;
 
 /**
+ * The demo passcode form.
+ *
+ * @param props - Called with the entered passcode.
+ * @returns Form element.
+ */
+function PasscodeForm({
+  onSubmit,
+}: {
+  readonly onSubmit: (passcode: string) => void;
+}): ReactElement {
+  const [passcode, setPasscode] = useState('');
+  const handleSubmit = (event: SyntheticEvent<HTMLFormElement>): void => {
+    event.preventDefault();
+    onSubmit(passcode);
+  };
+  return (
+    <form onSubmit={handleSubmit}>
+      <div className="field">
+        <label htmlFor="admin-passcode">Administrator passcode</label>
+        <input
+          id="admin-passcode"
+          type="password"
+          required
+          autoComplete="current-password"
+          value={passcode}
+          onChange={(e) => {
+            setPasscode(e.target.value);
+          }}
+        />
+      </div>
+      <button type="submit" className="btn btn-primary btn-block">
+        Sign in with passcode
+      </button>
+    </form>
+  );
+}
+
+/**
+ * Error and success banners for the admin queue.
+ *
+ * @param props - Current error and notice, if any.
+ * @returns Banners, or nothing.
+ */
+function QueueAlerts({
+  error,
+  notice,
+}: {
+  readonly error: string | null;
+  readonly notice: string | null;
+}): ReactElement {
+  return (
+    <>
+      {error && (
+        <div role="alert" className="alert">
+          {error}
+        </div>
+      )}
+      {notice && (
+        <div role="status" aria-live="polite" className="alert alert-success">
+          {notice}
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
  * Admin sign-in: an allow-listed Google account, or the demo passcode.
  *
  * @param props - Callback for a successful sign-in.
@@ -23,7 +90,6 @@ const messageOf = (err: unknown, fallback: string): string =>
  */
 function AdminSignIn({ onSignedIn }: { readonly onSignedIn: () => void }): ReactElement {
   const auth = useAuth();
-  const [passcode, setPasscode] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const attempt = async (login: () => Promise<boolean>): Promise<void> => {
@@ -38,11 +104,6 @@ function AdminSignIn({ onSignedIn }: { readonly onSignedIn: () => void }): React
   const withGoogle = async (): Promise<boolean> => {
     if (!auth.user || auth.user.isGuest) await auth.signInWithGoogle();
     return loginAdminWithGoogle((await auth.getIdToken()) ?? '');
-  };
-
-  const handlePasscode = (event: SyntheticEvent<HTMLFormElement>): void => {
-    event.preventDefault();
-    void attempt(() => loginAdmin(passcode));
   };
 
   return (
@@ -78,24 +139,11 @@ function AdminSignIn({ onSignedIn }: { readonly onSignedIn: () => void }): React
             </p>
           </>
         )}
-        <form onSubmit={handlePasscode}>
-          <div className="field">
-            <label htmlFor="admin-passcode">Administrator passcode</label>
-            <input
-              id="admin-passcode"
-              type="password"
-              required
-              autoComplete="current-password"
-              value={passcode}
-              onChange={(e) => {
-                setPasscode(e.target.value);
-              }}
-            />
-          </div>
-          <button type="submit" className="btn btn-primary btn-block">
-            Sign in with passcode
-          </button>
-        </form>
+        <PasscodeForm
+          onSubmit={(passcode) => {
+            void attempt(() => loginAdmin(passcode));
+          }}
+        />
       </div>
     </section>
   );
@@ -149,16 +197,7 @@ export function AdminDashboard({
           Sign out
         </button>
       </header>
-      {error && (
-        <div role="alert" className="alert">
-          {error}
-        </div>
-      )}
-      {notice && (
-        <div role="status" aria-live="polite" className="alert alert-success">
-          {notice}
-        </div>
-      )}
+      <QueueAlerts error={error} notice={notice} />
       <div className="issue-list">
         {issues.map((issue) => (
           <AdminIssueRow

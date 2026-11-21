@@ -36,6 +36,38 @@ interface OwnerDoc {
   readonly uid: string;
 }
 
+const sequenceRefIn = (db: Firestore): DocumentReference<SequenceDoc> =>
+  db.collection(META).doc(SEQUENCE_DOC) as DocumentReference<SequenceDoc>;
+
+const issueRefIn = (db: Firestore, id: string): DocumentReference<CivicIssue> =>
+  db.collection(ISSUES).doc(id) as DocumentReference<CivicIssue>;
+
+/**
+ * Returns a function that writes the demo records once, the first time the database
+ * is used. Concurrent callers share one transaction; a failure lets the next call retry.
+ *
+ * @param db - Firestore client.
+ * @param seed - Demo records to write into an empty database.
+ * @returns Idempotent "make sure the database is seeded" function.
+ */
+function createSeeder(db: Firestore, seed: readonly CivicIssue[]): () => Promise<void> {
+  const sequenceRef = sequenceRefIn(db);
+  let seeded: Promise<void> | undefined;
+  return () => {
+    seeded ??= db
+      .runTransaction(async (tx) => {
+        if ((await tx.get(sequenceRef)).exists) return;
+        for (const issue of seed) tx.set(issueRefIn(db, issue.id), issue);
+        tx.set(sequenceRef, { value: SEQUENCE_START + seed.length });
+      })
+      .catch((error: unknown) => {
+        seeded = undefined;
+        throw error;
+      });
+    return seeded;
+  };
+}
+
 /**
  * Creates an IssueStore backed by Google Cloud Firestore.
  *
@@ -52,26 +84,12 @@ export function createFirestoreIssueStore(db: Firestore, options: StoreOptions =
   const issues = db.collection(ISSUES);
   const images = db.collection(IMAGES);
   const owners = db.collection(OWNERS);
-  const sequenceRef = db.collection(META).doc(SEQUENCE_DOC) as DocumentReference<SequenceDoc>;
+  const sequenceRef = sequenceRefIn(db);
   const now = options.now ?? (() => new Date());
   const seed = options.seed ?? createSeedIssues();
-  const issueRef = (id: string): DocumentReference<CivicIssue> =>
-    issues.doc(id) as DocumentReference<CivicIssue>;
+  const issueRef = (id: string): DocumentReference<CivicIssue> => issueRefIn(db, id);
 
-  let seeded: Promise<void> | undefined;
-  const ensureSeeded = (): Promise<void> => {
-    seeded ??= db
-      .runTransaction(async (tx) => {
-        if ((await tx.get(sequenceRef)).exists) return;
-        for (const issue of seed) tx.set(issueRef(issue.id), issue);
-        tx.set(sequenceRef, { value: SEQUENCE_START + seed.length });
-      })
-      .catch((error: unknown) => {
-        seeded = undefined;
-        throw error;
-      });
-    return seeded;
-  };
+  const ensureSeeded = createSeeder(db, seed);
 
   return {
     async list() {

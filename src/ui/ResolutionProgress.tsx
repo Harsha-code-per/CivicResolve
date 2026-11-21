@@ -6,6 +6,39 @@ export interface ResolutionProgressProps {
 }
 
 /**
+ * Each department's resolved share of the complaints it owns.
+ *
+ * @param props - Aggregated analytics.
+ * @returns Heading and bar list.
+ */
+function DepartmentWorkload({ analytics }: ResolutionProgressProps): ReactElement {
+  return (
+    <>
+      <h3>Department workload</h3>
+      <ul className="bar-list">
+        {analytics.departmentProgress.map((row) => {
+          const owned = row.open + row.resolved;
+          return (
+            <li key={row.department}>
+              <span>
+                {row.department}: {row.resolved} of {owned} resolved
+              </span>
+              <progress
+                max={Math.max(owned, 1)}
+                value={row.resolved}
+                aria-label={`${row.department} resolved share`}
+              >
+                {row.resolved}
+              </progress>
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}
+
+/**
  * Visualises progress toward resolution: the status pipeline, SLA health and each
  * department's open versus resolved workload. Native progress elements keep it
  * accessible and free of chart libraries.
@@ -52,26 +85,7 @@ export function ResolutionProgress({ analytics }: ResolutionProgressProps): Reac
           </li>
         ))}
       </ul>
-      <h3>Department workload</h3>
-      <ul className="bar-list">
-        {analytics.departmentProgress.map((row) => {
-          const owned = row.open + row.resolved;
-          return (
-            <li key={row.department}>
-              <span>
-                {row.department}: {row.resolved} of {owned} resolved
-              </span>
-              <progress
-                max={Math.max(owned, 1)}
-                value={row.resolved}
-                aria-label={`${row.department} resolved share`}
-              >
-                {row.resolved}
-              </progress>
-            </li>
-          );
-        })}
-      </ul>
+      <DepartmentWorkload analytics={analytics} />
     </section>
   );
 }

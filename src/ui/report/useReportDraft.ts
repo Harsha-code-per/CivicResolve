@@ -29,6 +29,34 @@ const EMPTY_DRAFT: ReportDraft = { title: '', description: '', location: '', cat
 const messageOf = (error: unknown, fallback: string): string =>
   error instanceof Error ? error.message : fallback;
 
+interface Task {
+  readonly error: string | null;
+  readonly busy: boolean;
+  readonly run: (task: () => Promise<void>, fallback: string) => Promise<void>;
+}
+
+/**
+ * Runs one async action at a time, exposing a busy flag and its error message.
+ *
+ * @returns Busy flag, last error and the runner.
+ */
+function useTask(): Task {
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const run = async (task: () => Promise<void>, fallback: string): Promise<void> => {
+    setError(null);
+    setBusy(true);
+    try {
+      await task();
+    } catch (err) {
+      setError(messageOf(err, fallback));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return { error, busy, run };
+}
+
 /**
  * Holds the report form's draft, photo, triage preview and submission state.
  *
@@ -43,9 +71,8 @@ export function useReportDraft(
   const [draft, setDraft] = useState<ReportDraft>(EMPTY_DRAFT);
   const [imageDataUrl, setImageDataUrl] = useState<string | undefined>(undefined);
   const [triage, setTriage] = useState<TriageResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [successId, setSuccessId] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { error, busy, run } = useTask();
 
   const payload = (): CreateIssueInput => ({
     title: draft.title,
@@ -54,18 +81,6 @@ export function useReportDraft(
     ...(draft.category ? { category: draft.category } : {}),
     ...(imageDataUrl ? { imageDataUrl } : {}),
   });
-
-  const run = async (task: () => Promise<void>, fallback: string): Promise<void> => {
-    setError(null);
-    setBusy(true);
-    try {
-      await task();
-    } catch (err) {
-      setError(messageOf(err, fallback));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return {
     draft,

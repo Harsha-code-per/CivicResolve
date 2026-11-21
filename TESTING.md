@@ -8,11 +8,12 @@
 | Stores     | Vitest + fake Firestore | Both adapters run the same contract tests (`describe.each`): seeding, sequential ids, photo separation, transitions, seeding retry after a transient failure.                                                                                                                                               |
 | AI         | Vitest + injected fakes | Cascade fall-through on bad JSON or schema misses, cooldown and recovery, cache eviction, photo forwarding, fence stripping, and the Gemini SDK call shape (SDK mocked).                                                                                                                                    |
 | UI         | Testing Library + axe   | Hash routing, the collapsible sidebar and mobile drawer, theme, load errors, Firebase sign-in (Google, guest, failures) with the SDK mocked, My reports states, report → preview → submit with an ID token, photo validation, admin passcode and Google sign-in, tracker filters, table view, axe in jsdom. |
+| Quality    | Vitest + git ls-files   | Layer boundaries (the domain imports no React, Node or server code) and repository hygiene: no tracked keys, private keys or `.env` files, no `eval`/`innerHTML`, no browser `console`, no TODO markers.                                                                                                    |
 | End-to-end | Playwright + axe-core   | 5 journeys × 3 projects (desktop light, desktop dark, Pixel 7): WCAG 2.2 AA scans on the landing page and each console view, report → triage → track → admin resolve, focused error alert, sidebar focus and `aria-current`.                                                                                |
 
 ## Numbers
 
-- **108** unit and integration tests in 16 files.
+- **115** unit and integration tests in 18 files.
 - **100%** statements, branches, functions and lines. The thresholds are enforced in `vite.config.ts`,
   so coverage cannot drop.
 - **15** Playwright runs against the production build and server, failing on any console error or CSP

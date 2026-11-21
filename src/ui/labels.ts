@@ -12,3 +12,6 @@ export const PRIORITY_LABELS: Readonly<Record<IssuePriority, string>> = {
   medium: 'Medium',
   low: 'Low',
 };
+
+/** Departments are already human-readable, so they label themselves. */
+export const asIs = (value: string): string => value;

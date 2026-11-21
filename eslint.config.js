@@ -20,6 +20,7 @@ export default tseslint.config(
       'max-depth': ['error', 3],
       'max-params': ['error', 3],
       'max-lines': ['error', { max: 200, skipBlankLines: true, skipComments: true }],
+      'max-lines-per-function': ['error', { max: 60, skipBlankLines: true, skipComments: true }],
       eqeqeq: 'error',
       'no-console': ['error', { allow: ['error', 'warn', 'info'] }],
       '@typescript-eslint/consistent-type-imports': 'error',
@@ -53,6 +54,7 @@ export default tseslint.config(
     files: ['tests/**', 'e2e/**', 'scripts/**', '*.config.{js,ts}'],
     rules: {
       'max-lines': 'off',
+      'max-lines-per-function': 'off',
       'max-params': 'off',
       'no-console': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
@@ -66,5 +68,7 @@ export default tseslint.config(
       '@typescript-eslint/consistent-type-imports': ['error', { disallowTypeAnnotations: false }],
     },
   },
+  // Demo records are data, not logic.
+  { files: ['src/domain/seed.ts'], rules: { 'max-lines-per-function': 'off' } },
   { files: ['**/*.js', '**/*.mjs'], ...tseslint.configs.disableTypeChecked },
 );
