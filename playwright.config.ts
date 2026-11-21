@@ -11,7 +11,8 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   webServer: {
-    command: 'npm run build && PORT=8080 ADMIN_PASSCODE=civic-admin-2026 SESSION_SECRET=e2e-test-session-secret-key-32chars node dist/server/server/index.js',
+    command:
+      'npm run build && PORT=8080 ADMIN_PASSCODE=civic-admin-2026 SESSION_SECRET=e2e-test-session-secret-key-32chars node dist/server/server/index.js',
     url: 'http://127.0.0.1:8080/healthz',
     reuseExistingServer: !process.env['CI'],
     timeout: 60_000,

@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactElement } from 'react';
+import { useState, type ReactElement, type SyntheticEvent } from 'react';
 import {
   ISSUE_PRIORITIES,
   ISSUE_STATUSES,
@@ -29,7 +29,7 @@ export function AdminIssueRow({ issue, onUpdated, onError }: AdminIssueRowProps)
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const handleSave = async (event: FormEvent): Promise<void> => {
+  const handleSave = async (event: SyntheticEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     setSaving(true);
     try {

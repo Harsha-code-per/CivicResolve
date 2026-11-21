@@ -61,7 +61,7 @@ export interface CivicIssue {
   readonly aiSummary: string;
   readonly aiRationale: string;
   readonly triageSource: 'gemini' | 'deterministic';
-  readonly imageDataUrl?: string;
+  readonly hasImage: boolean;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly timeline: readonly StatusEvent[];
@@ -81,6 +81,20 @@ export interface IssueAnalytics {
   readonly resolved: number;
   readonly criticalOpen: number;
   readonly resolutionRate: number;
-  readonly byDepartment: Readonly<Record<MunicipalDepartment, number>>;
+  readonly overdueOpen: number;
+  readonly medianResolutionHours: number | null;
   readonly byPriority: Readonly<Record<IssuePriority, number>>;
+  readonly departmentProgress: readonly DepartmentProgress[];
+}
+
+export interface DepartmentProgress {
+  readonly department: MunicipalDepartment;
+  readonly open: number;
+  readonly resolved: number;
+}
+
+export interface SlaState {
+  readonly dueAt: string;
+  readonly hoursRemaining: number;
+  readonly breached: boolean;
 }

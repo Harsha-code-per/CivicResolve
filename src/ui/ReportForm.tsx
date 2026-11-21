@@ -1,12 +1,9 @@
-import { useRef, useState, type ChangeEvent, type FormEvent, type ReactElement } from 'react';
+import { useEffect, useRef, type ReactElement, type SyntheticEvent } from 'react';
 import { CATEGORY_LABELS } from '../domain/departments.js';
-import {
-  ISSUE_CATEGORIES,
-  type CivicIssue,
-  type IssueCategory,
-  type TriageResult,
-} from '../domain/types.js';
-import { previewTriage, submitIssue } from '../lib/api.js';
+import { FIELD_LIMITS } from '../domain/limits.js';
+import { ISSUE_CATEGORIES, type CivicIssue } from '../domain/types.js';
+import { ACCEPTED_IMAGE_TYPES } from '../lib/image.js';
+import { useReportDraft } from './report/useReportDraft.js';
 import { TriageInspector } from './TriageInspector.js';
 
 export interface ReportFormProps {
@@ -14,119 +11,41 @@ export interface ReportFormProps {
 }
 
 /**
- * Reads a user-selected image file into a base64 data URL.
+ * Citizen issue reporting form with a live Gemini triage preview beside it.
  *
- * @param file - Selected File object.
- * @returns Promise resolving to a data URL string.
- */
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      resolve(typeof reader.result === 'string' ? reader.result : '');
-    };
-    reader.onerror = () => {
-      reject(new Error('Could not read the selected image file.'));
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-/**
- * Renders the accessible Citizen Issue Reporting workspace with live Gemini AI triage preview.
- *
- * @param props - Callback invoked when a new issue is persisted.
+ * @param props - Callback invoked when a new issue is stored.
  * @returns ReportForm element.
  */
 export function ReportForm({ onCreated }: ReportFormProps): ReactElement {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [location, setLocation] = useState('');
-  const [category, setCategory] = useState<IssueCategory | ''>('');
-  const [imageDataUrl, setImageDataUrl] = useState<string | undefined>(undefined);
-  const [triage, setTriage] = useState<TriageResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [successId, setSuccessId] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const form = useReportDraft(onCreated);
+  const { draft } = form;
   const errorRef = useRef<HTMLDivElement>(null);
 
-  const reportError = (message: string): void => {
-    setError(message);
-    queueMicrotask(() => errorRef.current?.focus());
-  };
+  useEffect(() => {
+    if (form.error) errorRef.current?.focus();
+  }, [form.error]);
 
-  const payload = () => ({
-    title,
-    description,
-    location,
-    ...(category ? { category } : {}),
-    ...(imageDataUrl ? { imageDataUrl } : {}),
-  });
-
-  const handleImageChange = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      setImageDataUrl(undefined);
-      return;
-    }
-    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
-      reportError('Please upload a PNG, JPEG, or WebP photo.');
-      return;
-    }
-    try {
-      setError(null);
-      setImageDataUrl(await readFileAsDataUrl(file));
-    } catch (err) {
-      reportError(err instanceof Error ? err.message : 'Image upload failed.');
-    }
-  };
-
-  const handlePreview = async (): Promise<void> => {
-    setError(null);
-    setBusy(true);
-    try {
-      setTriage(await previewTriage(payload()));
-    } catch (err) {
-      reportError(err instanceof Error ? err.message : 'AI triage preview failed.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleSubmit = async (event: FormEvent): Promise<void> => {
+  const handleSubmit = (event: SyntheticEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    setError(null);
-    setSuccessId(null);
-    setBusy(true);
-    try {
-      const created = await submitIssue(payload());
-      setTriage(created.triage);
-      setSuccessId(created.issue.id);
-      setTitle('');
-      setDescription('');
-      setLocation('');
-      setCategory('');
-      setImageDataUrl(undefined);
-      onCreated(created.issue);
-    } catch (err) {
-      reportError(err instanceof Error ? err.message : 'Could not submit issue.');
-    } finally {
-      setBusy(false);
-    }
+    void form.submit();
   };
 
   return (
     <section aria-labelledby="report-heading" className="section-grid">
-      <form className="panel" onSubmit={(e) => void handleSubmit(e)} noValidate>
+      <form className="panel" onSubmit={handleSubmit} noValidate aria-busy={form.busy}>
         <h2 id="report-heading">Report a Civic Issue</h2>
-        {error && (
+        <p className="muted">
+          Describe the problem in your own words. Gemini picks the category, priority and
+          department; you can review its triage before submitting.
+        </p>
+        {form.error && (
           <div ref={errorRef} tabIndex={-1} role="alert" className="alert">
-            {error}
+            {form.error}
           </div>
         )}
-        {successId && (
-          <div role="status" aria-live="polite" className="alert alert-success">
-            Complaint {successId} submitted and routed automatically.
+        {form.successId && (
+          <div role="status" className="alert alert-success">
+            Complaint {form.successId} submitted and routed. Track it under Track Issues.
           </div>
         )}
         <div className="field">
@@ -134,9 +53,11 @@ export function ReportForm({ onCreated }: ReportFormProps): ReactElement {
           <input
             id="issue-title"
             required
-            value={title}
+            minLength={FIELD_LIMITS.title.min}
+            maxLength={FIELD_LIMITS.title.max}
+            value={draft.title}
             onChange={(e) => {
-              setTitle(e.target.value);
+              form.update('title', e.target.value);
             }}
             placeholder="e.g., Deep pothole outside Gandhipuram bus bay"
           />
@@ -146,23 +67,26 @@ export function ReportForm({ onCreated }: ReportFormProps): ReactElement {
           <input
             id="issue-location"
             required
-            value={location}
+            autoComplete="street-address"
+            minLength={FIELD_LIMITS.location.min}
+            maxLength={FIELD_LIMITS.location.max}
+            value={draft.location}
             onChange={(e) => {
-              setLocation(e.target.value);
+              form.update('location', e.target.value);
             }}
             placeholder="e.g., Avinashi Road, Neelambur, Coimbatore"
           />
         </div>
         <div className="field">
-          <label htmlFor="issue-category">Category (Optional — AI auto-classifies)</label>
+          <label htmlFor="issue-category">Category (optional, AI auto-classifies)</label>
           <select
             id="issue-category"
-            value={category}
+            value={draft.category}
             onChange={(e) => {
-              setCategory(e.target.value as IssueCategory | '');
+              form.update('category', e.target.value);
             }}
           >
-            <option value="">Let Gemini AI detect automatically</option>
+            <option value="">Let Gemini detect it</option>
             {ISSUE_CATEGORIES.map((cat) => (
               <option key={cat} value={cat}>
                 {CATEGORY_LABELS[cat]}
@@ -176,37 +100,48 @@ export function ReportForm({ onCreated }: ReportFormProps): ReactElement {
             id="issue-description"
             rows={4}
             required
-            value={description}
+            minLength={FIELD_LIMITS.description.min}
+            maxLength={FIELD_LIMITS.description.max}
+            aria-describedby="issue-description-hint"
+            value={draft.description}
             onChange={(e) => {
-              setDescription(e.target.value);
+              form.update('description', e.target.value);
             }}
-            placeholder="Describe the hazard, duration, and impact on commuters or residents..."
+            placeholder="What is wrong, since when, and who is affected?"
           />
+          <span id="issue-description-hint" className="hint">
+            At least {FIELD_LIMITS.description.min} characters. Mention hazards such as exposed
+            wires or flooding so urgent issues are prioritised.
+          </span>
         </div>
         <div className="field">
-          <label htmlFor="issue-photo">Photo Evidence (Optional PNG/JPEG/WebP)</label>
+          <label htmlFor="issue-photo">Photo evidence (optional PNG, JPEG or WebP)</label>
           <input
+            key={form.successId ?? 'draft'}
             id="issue-photo"
             type="file"
-            accept="image/png,image/jpeg,image/webp"
-            onChange={(e) => void handleImageChange(e)}
+            accept={ACCEPTED_IMAGE_TYPES.join(',')}
+            onChange={(e) => void form.attachImage(e.target.files?.[0])}
           />
+          {form.imageDataUrl && (
+            <img src={form.imageDataUrl} alt="Selected evidence preview" className="issue-thumb" />
+          )}
         </div>
         <div className="cta-row">
           <button
             type="button"
             className="btn"
-            disabled={busy}
-            onClick={() => void handlePreview()}
+            disabled={form.busy}
+            onClick={() => void form.preview()}
           >
             Preview AI Triage
           </button>
-          <button type="submit" className="btn btn-primary" disabled={busy}>
-            {busy ? 'Analyzing...' : 'Submit Grievance'}
+          <button type="submit" className="btn btn-primary" disabled={form.busy}>
+            {form.busy ? 'Analyzing…' : 'Submit Grievance'}
           </button>
         </div>
       </form>
-      <TriageInspector triage={triage} />
+      <TriageInspector triage={form.triage} />
     </section>
   );
 }

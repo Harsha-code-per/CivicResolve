@@ -1,5 +1,4 @@
 import { useMemo, useState, type ReactElement } from 'react';
-import { CATEGORY_LABELS } from '../domain/departments.js';
 import {
   ISSUE_PRIORITIES,
   ISSUE_STATUSES,
@@ -11,25 +10,24 @@ import {
   type MunicipalDepartment,
 } from '../domain/types.js';
 import { filterAndSortIssues } from '../domain/workflow.js';
+import { PRIORITY_LABELS, STATUS_LABELS } from './labels.js';
+import { ResolutionProgress } from './ResolutionProgress.js';
+import { IssueCard } from './tracker/IssueCard.js';
+import { IssueTable } from './tracker/IssueTable.js';
 
 export interface IssueTrackerProps {
   readonly issues: readonly CivicIssue[];
   readonly analytics: IssueAnalytics;
+  readonly nowMs: number;
 }
-
-const STATUS_LABELS: Readonly<Record<IssueStatus, string>> = {
-  reported: 'Reported',
-  in_progress: 'In Progress',
-  resolved: 'Resolved',
-};
 
 /**
  * Renders the public Issue Tracking Dashboard with search, filters, status timelines, and table view.
  *
- * @param props - Current civic issues list and aggregated analytics.
+ * @param props - Civic issues, aggregated analytics and the current time.
  * @returns IssueTracker element.
  */
-export function IssueTracker({ issues, analytics }: IssueTrackerProps): ReactElement {
+export function IssueTracker({ issues, analytics, nowMs }: IssueTrackerProps): ReactElement {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<IssueStatus | 'all'>('all');
   const [priority, setPriority] = useState<IssuePriority | 'all'>('all');
@@ -98,7 +96,7 @@ export function IssueTracker({ issues, analytics }: IssueTrackerProps): ReactEle
             <option value="all">All priorities</option>
             {ISSUE_PRIORITIES.map((prio) => (
               <option key={prio} value={prio}>
-                {prio.toUpperCase()}
+                {PRIORITY_LABELS[prio]}
               </option>
             ))}
           </select>
@@ -122,76 +120,19 @@ export function IssueTracker({ issues, analytics }: IssueTrackerProps): ReactEle
         </div>
       </div>
 
-      <p aria-live="polite" className="issue-id">
+      <ResolutionProgress analytics={analytics} />
+
+      <p aria-live="polite" className="issue-meta">
         Showing {visibleIssues.length} of {analytics.total} grievances ({analytics.resolved}{' '}
         resolved).
       </p>
 
       {showTable ? (
-        <div className="panel">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th scope="col">ID</th>
-                <th scope="col">Title</th>
-                <th scope="col">Department</th>
-                <th scope="col">Priority</th>
-                <th scope="col">Status</th>
-                <th scope="col">SLA</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleIssues.map((issue) => (
-                <tr key={issue.id}>
-                  <td>{issue.id}</td>
-                  <td>{issue.title}</td>
-                  <td>{issue.department}</td>
-                  <td>{issue.priority.toUpperCase()}</td>
-                  <td>{STATUS_LABELS[issue.status]}</td>
-                  <td>{issue.slaHours}h</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <IssueTable issues={visibleIssues} nowMs={nowMs} />
       ) : (
         <div className="issue-list">
           {visibleIssues.map((issue) => (
-            <article key={issue.id} className="issue-card">
-              <div className="issue-header">
-                <div>
-                  <span className="issue-id">{issue.id}</span>
-                  <h3>{issue.title}</h3>
-                  <p>{issue.location}</p>
-                </div>
-                <div className="badge-row">
-                  <span className={`badge badge-${issue.priority}`}>{issue.priority}</span>
-                  <span className={`badge badge-${issue.status}`}>
-                    {STATUS_LABELS[issue.status]}
-                  </span>
-                  <span className="badge badge-low">{CATEGORY_LABELS[issue.category]}</span>
-                </div>
-              </div>
-              <p>{issue.aiSummary}</p>
-              <p className="issue-id">
-                Department: {issue.department} · SLA: {issue.slaHours}h · Urgency:{' '}
-                {issue.urgencyScore}/100
-              </p>
-              {issue.imageDataUrl && (
-                <img
-                  src={issue.imageDataUrl}
-                  alt={`Citizen evidence for ${issue.title}`}
-                  className="issue-thumb"
-                />
-              )}
-              <ol className="timeline" aria-label={`Status history for ${issue.id}`}>
-                {issue.timeline.map((event) => (
-                  <li key={`${event.timestamp}-${event.status}`}>
-                    <strong>{STATUS_LABELS[event.status]}</strong> ({event.actor}): {event.note}
-                  </li>
-                ))}
-              </ol>
-            </article>
+            <IssueCard key={issue.id} issue={issue} nowMs={nowMs} />
           ))}
         </div>
       )}

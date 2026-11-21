@@ -20,8 +20,10 @@ export function createSeedIssues(): CivicIssue[] {
       slaHours: 4,
       status: 'in_progress',
       aiSummary: 'Deep pothole on Avinashi Road causing immediate two-wheeler accident hazard.',
-      aiRationale: 'Critical urgency due to active commuter safety risk on a high-volume arterial road.',
+      aiRationale:
+        'Critical urgency due to active commuter safety risk on a high-volume arterial road.',
       triageSource: 'deterministic',
+      hasImage: false,
       createdAt: '2026-11-20T04:15:00.000Z',
       updatedAt: '2026-11-20T07:30:00.000Z',
       timeline: [
@@ -54,6 +56,7 @@ export function createSeedIssues(): CivicIssue[] {
       aiSummary: 'Multi-day garbage overflow obstructing pedestrian footpath near Gandhipuram.',
       aiRationale: 'High priority due to public sanitation impact and dense commuter footfall.',
       triageSource: 'deterministic',
+      hasImage: false,
       createdAt: '2026-11-20T06:40:00.000Z',
       updatedAt: '2026-11-20T06:40:00.000Z',
       timeline: [
@@ -77,9 +80,12 @@ export function createSeedIssues(): CivicIssue[] {
       department: 'Street Lighting & Electrical Wing',
       slaHours: 24,
       status: 'reported',
-      aiSummary: 'Three consecutive non-functional streetlights darkening an active school crossing.',
-      aiRationale: 'High priority because poor evening visibility near a school elevates safety risks.',
+      aiSummary:
+        'Three consecutive non-functional streetlights darkening an active school crossing.',
+      aiRationale:
+        'High priority because poor evening visibility near a school elevates safety risks.',
       triageSource: 'deterministic',
+      hasImage: false,
       createdAt: '2026-11-19T13:10:00.000Z',
       updatedAt: '2026-11-19T13:10:00.000Z',
       timeline: [
@@ -104,8 +110,10 @@ export function createSeedIssues(): CivicIssue[] {
       slaHours: 4,
       status: 'resolved',
       aiSummary: 'Fractured drinking water main causing roadway flooding at Peelamedu junction.',
-      aiRationale: 'Critical infrastructure failure affecting potable water supply and road safety.',
+      aiRationale:
+        'Critical infrastructure failure affecting potable water supply and road safety.',
       triageSource: 'deterministic',
+      hasImage: false,
       createdAt: '2026-11-18T02:50:00.000Z',
       updatedAt: '2026-11-18T08:20:00.000Z',
       timeline: [

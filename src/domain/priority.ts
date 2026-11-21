@@ -19,6 +19,14 @@ export const PRIORITY_RANK: Readonly<Record<IssuePriority, number>> = {
   low: 3,
 };
 
+/** Lowest urgency score consistent with each priority, so score and tier never disagree. */
+export const PRIORITY_SCORE_FLOOR: Readonly<Record<IssuePriority, number>> = {
+  critical: 80,
+  high: 55,
+  medium: 35,
+  low: 10,
+};
+
 const CRITICAL_SIGNALS = [
   'exposed wire',
   'live wire',
@@ -48,6 +56,15 @@ const HIGH_SIGNALS = [
   'hazard',
 ] as const;
 
+/** Score weights: a single critical signal plus the base lands in the high band. */
+const SCORE_BASE = 25;
+const CRITICAL_WEIGHT = 35;
+const HIGH_WEIGHT = 18;
+const MEDIUM_WEIGHT = 10;
+const PHOTO_BONUS = 5;
+const SCORE_MIN = 10;
+const SCORE_MAX = 100;
+
 const MEDIUM_SIGNALS = ['damaged', 'cracked', 'flickering', 'clogged', 'pile', 'slow'] as const;
 
 /**
@@ -74,8 +91,13 @@ export function computeUrgencyScore(text: string, hasPhoto: boolean): number {
   const highHits = matchSignals(normalized, HIGH_SIGNALS);
   const mediumHits = matchSignals(normalized, MEDIUM_SIGNALS);
 
-  const raw = 25 + criticalHits * 35 + highHits * 18 + mediumHits * 10 + (hasPhoto ? 5 : 0);
-  return Math.max(10, Math.min(100, raw));
+  const raw =
+    SCORE_BASE +
+    criticalHits * CRITICAL_WEIGHT +
+    highHits * HIGH_WEIGHT +
+    mediumHits * MEDIUM_WEIGHT +
+    (hasPhoto ? PHOTO_BONUS : 0);
+  return Math.max(SCORE_MIN, Math.min(SCORE_MAX, raw));
 }
 
 /**
@@ -85,9 +107,9 @@ export function computeUrgencyScore(text: string, hasPhoto: boolean): number {
  * @returns Canonical IssuePriority tier.
  */
 export function priorityFromScore(score: number): IssuePriority {
-  if (score >= 80) return 'critical';
-  if (score >= 55) return 'high';
-  if (score >= 35) return 'medium';
+  if (score >= PRIORITY_SCORE_FLOOR.critical) return 'critical';
+  if (score >= PRIORITY_SCORE_FLOOR.high) return 'high';
+  if (score >= PRIORITY_SCORE_FLOOR.medium) return 'medium';
   return 'low';
 }
 
@@ -133,5 +155,45 @@ export function triageDeterministic(input: DeterministicTriageInput): TriageResu
     summary: `${label} issue reported near ${input.location}; routed to ${department}.`,
     rationale: `Classified as ${priority.toUpperCase()} priority (urgency ${String(urgencyScore)}/100, ${String(slaHours)}h SLA) based on public-safety and infrastructure impact signals.`,
     source: 'deterministic',
+  };
+}
+
+/**
+ * Returns whichever of two priorities is more urgent.
+ *
+ * @param left - First priority.
+ * @param right - Second priority.
+ * @returns The more urgent priority.
+ */
+export function moreUrgent(left: IssuePriority, right: IssuePriority): IssuePriority {
+  return PRIORITY_RANK[left] <= PRIORITY_RANK[right] ? left : right;
+}
+
+/**
+ * Merges Gemini's judgement with the rule engine under a safety floor.
+ *
+ * Gemini owns the category, department and wording. The rule engine owns the SLA and
+ * sets a floor: the model may raise a priority but can never downgrade a hazard the
+ * rules flag (for example an exposed live wire), and the urgency score always sits
+ * inside the band of the final priority.
+ *
+ * @param ai - Category, priority, department and wording proposed by Gemini.
+ * @param rules - The deterministic triage of the same complaint.
+ * @param model - Name of the Gemini model that answered.
+ * @returns Final TriageResult.
+ */
+export function reconcileTriage(
+  ai: Pick<TriageResult, 'category' | 'priority' | 'department' | 'summary' | 'rationale'>,
+  rules: TriageResult,
+  model: string,
+): TriageResult {
+  const priority = moreUrgent(ai.priority, rules.priority);
+  return {
+    ...ai,
+    priority,
+    urgencyScore: Math.max(rules.urgencyScore, PRIORITY_SCORE_FLOOR[priority]),
+    slaHours: slaHoursForPriority(priority),
+    source: 'gemini',
+    model,
   };
 }

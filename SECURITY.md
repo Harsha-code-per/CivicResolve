@@ -3,6 +3,7 @@
 CivicResolve applies defense-in-depth across HTTP transport, authentication, file uploads, AI prompt handling, and container runtime.
 
 ## Controls
+
 - **Strict HTTP Headers (`server/lib/security.ts`):** Enforces `Content-Security-Policy` (`default-src 'self'`, `script-src 'self'`, `style-src 'self'`, `object-src 'none'`, `frame-ancestors 'none'`), `Strict-Transport-Security`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `COOP: same-origin`, `CORP: same-origin`, and `Permissions-Policy`.
 - **CSRF & Origin Protection (`server/app.ts`):** Blocks cross-origin state-changing requests (`POST`/`PATCH`) with `403`.
 - **Rate Limiting & Payload Caps (`server/lib/rate-limit.ts`, `server/lib/http.ts`):** Bounded per-IP sliding-window rate limiter (`429` + `Retry-After`) and strict body size caps (`16 KB` standard JSON, `2 MB` image upload).

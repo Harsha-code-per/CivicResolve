@@ -3,6 +3,7 @@
 CivicResolve targets **WCAG 2.2 Level AA** compliance across desktop, mobile, keyboard-only, screen-reader, and reduced-motion environments.
 
 ## Implemented Standards
+
 - **Semantic Landmarks & Skip Navigation (`src/ui/App.tsx`):** Proper `<header>`, `<nav>`, `<main>`, `<footer>`, single `<h1>` per view, and a keyboard-focusable Skip to Main Content link.
 - **ARIA Tabs & Full Keyboard Support:** Implements `role="tablist"`, `role="tab"`, `role="tabpanel"`, `aria-selected`, roving `tabIndex`, and `ArrowLeft` / `ArrowRight` / `Home` / `End` navigation.
 - **Non-Color-Only Status & Priority Indicators:** Every priority (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`) and status (`Reported`, `In Progress`, `Resolved`) pairs high-contrast color tokens (`>= 4.5:1`) with explicit text labels.

@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactElement } from 'react';
+import { useState, type ReactElement, type SyntheticEvent } from 'react';
 import type { CivicIssue } from '../domain/types.js';
 import { loginAdmin, logoutAdmin } from '../lib/api.js';
 import { AdminIssueRow } from './AdminIssueRow.js';
@@ -26,7 +26,7 @@ export function AdminDashboard({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const handleLogin = async (event: FormEvent): Promise<void> => {
+  const handleLogin = async (event: SyntheticEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     setError(null);
     try {
@@ -39,8 +39,12 @@ export function AdminDashboard({
   };
 
   const handleLogout = async (): Promise<void> => {
-    await logoutAdmin();
-    onAuthChange(false);
+    try {
+      await logoutAdmin();
+      onAuthChange(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sign out failed.');
+    }
   };
 
   if (!authenticated) {

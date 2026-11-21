@@ -1,84 +1,91 @@
+import type { AdminUpdateIssueInput, CreateIssueInput } from '../../src/domain/schemas.js';
 import { createSeedIssues } from '../../src/domain/seed.js';
-import type { CreateIssueInput, AdminUpdateIssueInput } from '../../src/domain/schemas.js';
 import type { CivicIssue, TriageResult } from '../../src/domain/types.js';
-import { applyAdminTransition } from '../../src/domain/workflow.js';
+import {
+  applyAdminTransition,
+  buildIssueRecord,
+  formatIssueId,
+} from '../../src/domain/workflow.js';
 
+/** First reference number handed out after the seed records. */
+export const SEQUENCE_START = 1000;
+
+/** Storage port: the HTTP layer depends on this, never on a concrete database. */
 export interface IssueStore {
-  list(): readonly CivicIssue[];
-  getById(id: string): CivicIssue | undefined;
-  create(input: CreateIssueInput, triage: TriageResult, nowIso?: string): CivicIssue;
-  updateByAdmin(id: string, input: AdminUpdateIssueInput, nowIso?: string): CivicIssue | undefined;
+  list(): Promise<readonly CivicIssue[]>;
+  getById(id: string): Promise<CivicIssue | undefined>;
+  getImage(id: string): Promise<string | undefined>;
+  create(input: CreateIssueInput, triage: TriageResult): Promise<CivicIssue>;
+  update(id: string, input: AdminUpdateIssueInput): Promise<CivicIssue | undefined>;
+}
+
+export interface StoreOptions {
+  readonly seed?: readonly CivicIssue[];
+  readonly now?: () => Date;
 }
 
 /**
- * Creates a fast, deterministic in-memory civic issue store pre-seeded for live demos.
+ * Turns a validated admin update into the domain transition parameters.
  *
- * @param initialIssues - Optional initial records (defaults to realistic municipal seed data).
- * @returns IssueStore repository instance.
+ * @param input - Validated admin update payload.
+ * @param timestamp - ISO time of the change.
+ * @returns Parameters for applyAdminTransition.
  */
-export function createIssueStore(initialIssues?: readonly CivicIssue[]): IssueStore {
-  const issues: CivicIssue[] = [...(initialIssues ?? createSeedIssues())];
-  let sequence = 1000 + issues.length;
+export function toTransition(
+  input: AdminUpdateIssueInput,
+  timestamp: string,
+): Parameters<typeof applyAdminTransition>[1] {
+  return {
+    status: input.status,
+    note: input.note,
+    timestamp,
+    ...(input.department ? { department: input.department } : {}),
+    ...(input.priority ? { priority: input.priority } : {}),
+  };
+}
+
+/**
+ * Creates an in-memory issue store, pre-seeded for demos and used by tests and local dev.
+ *
+ * @param options - Optional seed records and clock.
+ * @returns IssueStore backed by process memory.
+ */
+export function createMemoryIssueStore(options: StoreOptions = {}): IssueStore {
+  const issues = new Map((options.seed ?? createSeedIssues()).map((issue) => [issue.id, issue]));
+  const images = new Map<string, string>();
+  const now = options.now ?? (() => new Date());
+  let sequence = SEQUENCE_START + issues.size;
 
   return {
-    list(): readonly CivicIssue[] {
-      return [...issues];
-    },
+    list: () => Promise.resolve([...issues.values()]),
+    getById: (id) => Promise.resolve(issues.get(id)),
+    getImage: (id) => Promise.resolve(images.get(id)),
 
-    getById(id: string): CivicIssue | undefined {
-      return issues.find((item) => item.id === id);
-    },
-
-    create(input: CreateIssueInput, triage: TriageResult, nowIso = new Date().toISOString()): CivicIssue {
+    create(input, triage) {
       sequence += 1;
-      const record: CivicIssue = {
-        id: `CR-2026-${String(sequence)}`,
-        title: input.title,
-        description: input.description,
-        location: input.location,
-        category: triage.category,
-        priority: triage.priority,
-        urgencyScore: triage.urgencyScore,
-        department: triage.department,
-        slaHours: triage.slaHours,
-        status: 'reported',
-        aiSummary: triage.summary,
-        aiRationale: triage.rationale,
-        triageSource: triage.source,
-        ...(input.imageDataUrl ? { imageDataUrl: input.imageDataUrl } : {}),
-        createdAt: nowIso,
-        updatedAt: nowIso,
-        timeline: [
-          {
-            status: 'reported',
-            timestamp: nowIso,
-            actor: 'citizen',
-            note: `Submitted by citizen and triaged (${triage.source}) to ${triage.department}.`,
-          },
-        ],
-      };
-      issues.unshift(record);
-      return record;
+      const issue = buildIssueRecord({
+        id: formatIssueId(sequence),
+        input,
+        triage,
+        nowIso: now().toISOString(),
+      });
+      issues.set(issue.id, issue);
+      if (input.imageDataUrl) images.set(issue.id, input.imageDataUrl);
+      return Promise.resolve(issue);
     },
 
-    updateByAdmin(
-      id: string,
-      input: AdminUpdateIssueInput,
-      nowIso = new Date().toISOString(),
-    ): CivicIssue | undefined {
-      const idx = issues.findIndex((item) => item.id === id);
-      const current = issues[idx];
-      if (idx === -1 || !current) return undefined;
-
-      const updated = applyAdminTransition(current, {
-        status: input.status,
-        note: input.note,
-        timestamp: nowIso,
-        ...(input.department ? { department: input.department } : {}),
-        ...(input.priority ? { priority: input.priority } : {}),
+    update(id, input) {
+      // The executor turns a rejected transition into a rejected promise, like a database would.
+      return new Promise((resolve) => {
+        const current = issues.get(id);
+        if (!current) {
+          resolve(undefined);
+          return;
+        }
+        const updated = applyAdminTransition(current, toTransition(input, now().toISOString()));
+        issues.set(id, updated);
+        resolve(updated);
       });
-      issues[idx] = updated;
-      return updated;
     },
   };
 }

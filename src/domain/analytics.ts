@@ -1,54 +1,88 @@
+import { computeSlaState, MS_PER_HOUR, resolvedAt } from './sla.js';
 import {
   ISSUE_PRIORITIES,
   MUNICIPAL_DEPARTMENTS,
   type CivicIssue,
+  type DepartmentProgress,
   type IssueAnalytics,
   type IssuePriority,
-  type MunicipalDepartment,
 } from './types.js';
 
+const PERCENT = 100;
+const HALF = 2;
+
 /**
- * Computes deterministic dashboard KPIs and category/department breakdowns.
+ * Returns the median of a list of numbers, or null for an empty list.
+ *
+ * @param values - Numbers to summarise.
+ * @returns Median value rounded to one decimal place, or null.
+ */
+function median(values: readonly number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / HALF);
+  const start = sorted.length % HALF === 0 ? mid - 1 : mid;
+  const middle = sorted.slice(start, mid + 1);
+  const value = middle.reduce((sum, item) => sum + item, 0) / middle.length;
+  return Math.round(value * 10) / 10;
+}
+
+/**
+ * Hours between submission and resolution for every resolved issue.
+ *
+ * @param issues - Civic issues.
+ * @returns Resolution durations in hours.
+ */
+function resolutionDurations(issues: readonly CivicIssue[]): number[] {
+  return issues.flatMap((issue) => {
+    const closed = resolvedAt(issue);
+    return closed ? [(Date.parse(closed) - Date.parse(issue.createdAt)) / MS_PER_HOUR] : [];
+  });
+}
+
+/**
+ * Counts open and resolved issues for every department, in a fixed order.
+ *
+ * @param issues - Civic issues.
+ * @returns One progress row per municipal department.
+ */
+function departmentProgress(issues: readonly CivicIssue[]): DepartmentProgress[] {
+  return MUNICIPAL_DEPARTMENTS.map((department) => {
+    const owned = issues.filter((issue) => issue.department === department);
+    const resolved = owned.filter((issue) => issue.status === 'resolved').length;
+    return { department, open: owned.length - resolved, resolved };
+  });
+}
+
+/**
+ * Computes dashboard KPIs, SLA breaches and per-department progress.
  *
  * @param issues - List of civic issues to aggregate.
+ * @param nowMs - Current time in epoch milliseconds (passed in to keep the domain pure).
  * @returns Complete IssueAnalytics summary object.
  */
-export function computeAnalytics(issues: readonly CivicIssue[]): IssueAnalytics {
-  const byDepartment = Object.fromEntries(
-    MUNICIPAL_DEPARTMENTS.map((dept) => [dept, 0]),
-  ) as Record<MunicipalDepartment, number>;
+export function computeAnalytics(issues: readonly CivicIssue[], nowMs: number): IssueAnalytics {
+  const count = (predicate: (issue: CivicIssue) => boolean): number =>
+    issues.filter(predicate).length;
+  const open = (issue: CivicIssue): boolean => issue.status !== 'resolved';
 
-  const byPriority = Object.fromEntries(ISSUE_PRIORITIES.map((prio) => [prio, 0])) as Record<
-    IssuePriority,
-    number
-  >;
+  const byPriority = Object.fromEntries(
+    ISSUE_PRIORITIES.map((priority) => [priority, count((issue) => issue.priority === priority)]),
+  ) as Record<IssuePriority, number>;
 
-  let reported = 0;
-  let inProgress = 0;
-  let resolved = 0;
-  let criticalOpen = 0;
-
-  for (const issue of issues) {
-    byDepartment[issue.department] += 1;
-    byPriority[issue.priority] += 1;
-
-    if (issue.status === 'reported') reported += 1;
-    if (issue.status === 'in_progress') inProgress += 1;
-    if (issue.status === 'resolved') resolved += 1;
-    if (issue.priority === 'critical' && issue.status !== 'resolved') criticalOpen += 1;
-  }
-
+  const resolved = count((issue) => issue.status === 'resolved');
   const total = issues.length;
-  const resolutionRate = total === 0 ? 0 : Math.round((resolved / total) * 100);
 
   return {
     total,
-    reported,
-    inProgress,
+    reported: count((issue) => issue.status === 'reported'),
+    inProgress: count((issue) => issue.status === 'in_progress'),
     resolved,
-    criticalOpen,
-    resolutionRate,
-    byDepartment,
+    criticalOpen: count((issue) => issue.priority === 'critical' && open(issue)),
+    resolutionRate: total === 0 ? 0 : Math.round((resolved / total) * PERCENT),
+    overdueOpen: count((issue) => open(issue) && computeSlaState(issue, nowMs).breached),
+    medianResolutionHours: median(resolutionDurations(issues)),
     byPriority,
+    departmentProgress: departmentProgress(issues),
   };
 }

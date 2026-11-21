@@ -1,0 +1,132 @@
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
+import { AdminDashboard } from '../../src/ui/AdminDashboard.js';
+import { mockFetch, seedIssues } from './helpers.js';
+
+describe('AdminDashboard', () => {
+  it('signs in, reports a wrong passcode, and signs out', async () => {
+    let attempts = 0;
+    mockFetch({
+      'POST /api/admin/login': () => {
+        attempts += 1;
+        return attempts === 1
+          ? { status: 401, body: { error: 'Invalid administrator passcode.' } }
+          : { body: { authenticated: true } };
+      },
+    });
+    const onAuthChange = vi.fn();
+    render(
+      <AdminDashboard
+        authenticated={false}
+        issues={[]}
+        onAuthChange={onAuthChange}
+        onUpdated={vi.fn()}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText('Administrator Passcode'), 'wrong');
+    await user.click(screen.getByRole('button', { name: 'Sign In to Admin Dashboard' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid administrator passcode.');
+    await user.type(screen.getByLabelText('Administrator Passcode'), 'civic-admin-2026');
+    await user.click(screen.getByRole('button', { name: 'Sign In to Admin Dashboard' }));
+    await vi.waitFor(() => {
+      expect(onAuthChange).toHaveBeenCalledWith(true);
+    });
+  });
+
+  it('falls back to generic messages for non-Error failures', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject('offline')),
+    );
+    render(
+      <AdminDashboard
+        authenticated={false}
+        issues={[]}
+        onAuthChange={vi.fn()}
+        onUpdated={vi.fn()}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText('Administrator Passcode'), 'pass');
+    await user.click(screen.getByRole('button', { name: 'Sign In to Admin Dashboard' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sign in failed.');
+  });
+
+  it('updates an issue, surfaces update errors, and handles sign-out failures', async () => {
+    const issues = seedIssues().slice(0, 1);
+    let patches = 0;
+    let logouts = 0;
+    mockFetch({
+      'PATCH /api/admin/issues/CR-2026-1001': () => {
+        patches += 1;
+        return patches === 1
+          ? {
+              status: 409,
+              body: { error: 'Invalid status transition from in_progress to reported.' },
+            }
+          : { body: { issue: { ...issues[0], status: 'resolved' } } };
+      },
+      'POST /api/admin/logout': () => {
+        logouts += 1;
+        return logouts === 1
+          ? { status: 500, body: { error: 'Sign out broke.' } }
+          : { body: { authenticated: false } };
+      },
+    });
+    const onUpdated = vi.fn();
+    const onAuthChange = vi.fn();
+    render(
+      <AdminDashboard
+        authenticated
+        issues={issues}
+        onAuthChange={onAuthChange}
+        onUpdated={onUpdated}
+      />,
+    );
+    const user = userEvent.setup();
+
+    await user.selectOptions(screen.getByLabelText('Priority'), 'high');
+    await user.selectOptions(
+      screen.getByLabelText('Department'),
+      'Traffic & Public Safety Authority',
+    );
+    await user.type(screen.getByLabelText('Resolution / Dispatch Audit Note'), 'Patched');
+    await user.click(screen.getByRole('button', { name: 'Save Status Update' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid status transition');
+
+    await user.type(screen.getByLabelText('Resolution / Dispatch Audit Note'), 'Patched again');
+    await user.click(screen.getByRole('button', { name: 'Save Status Update' }));
+    expect(await screen.findByText('Updated CR-2026-1001 to resolved.')).toBeInTheDocument();
+    expect(onUpdated).toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Sign Out' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sign out broke.');
+    await user.click(screen.getByRole('button', { name: 'Sign Out' }));
+    await vi.waitFor(() => {
+      expect(onAuthChange).toHaveBeenCalledWith(false);
+    });
+  });
+
+  it('uses generic messages when updates and sign-out fail without an Error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject('offline')),
+    );
+    render(
+      <AdminDashboard
+        authenticated
+        issues={seedIssues().slice(0, 1)}
+        onAuthChange={vi.fn()}
+        onUpdated={vi.fn()}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText('Resolution / Dispatch Audit Note'), 'Note');
+    await user.click(screen.getByRole('button', { name: 'Save Status Update' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Failed to update issue.');
+    await user.click(screen.getByRole('button', { name: 'Sign Out' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sign out failed.');
+  });
+});

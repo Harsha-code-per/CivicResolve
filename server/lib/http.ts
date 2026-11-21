@@ -11,14 +11,33 @@ export class HttpError extends Error {
   }
 }
 
+/** Every status code the API uses, named once. */
+export const HTTP_STATUS = {
+  ok: 200,
+  created: 201,
+  badRequest: 400,
+  unauthorized: 401,
+  forbidden: 403,
+  notFound: 404,
+  conflict: 409,
+  payloadTooLarge: 413,
+  unsupportedMediaType: 415,
+  tooManyRequests: 429,
+  internalError: 500,
+} as const;
+
+const HTML_TYPE = 'text/html; charset=utf-8';
+
 const MIME_TYPES: Readonly<Record<string, string>> = {
-  '.html': 'text/html; charset=utf-8',
+  '.html': HTML_TYPE,
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.json': 'application/json; charset=utf-8',
   '.ico': 'image/x-icon',
+  '.webmanifest': 'application/manifest+json',
+  '.woff2': 'font/woff2',
 };
 
 /**
@@ -44,19 +63,23 @@ export function sendJson(res: ServerResponse, statusCode: number, payload: unkno
  * @returns Parsed JSON value.
  */
 export async function readJsonBody(req: IncomingMessage, maxBytes: number): Promise<unknown> {
-  const contentType = req.headers['content-type'] ?? '';
-  if (!contentType.toLowerCase().includes('application/json')) {
-    throw new HttpError(415, 'Content-Type must be application/json.');
+  const contentType = String(req.headers['content-type']).toLowerCase();
+  if (!contentType.includes('application/json')) {
+    throw new HttpError(HTTP_STATUS.unsupportedMediaType, 'Content-Type must be application/json.');
   }
 
   const chunks: Buffer[] = [];
   let total = 0;
 
   for await (const chunk of req) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string);
+    // Without setEncoding, request chunks are always Buffers.
+    const buffer = chunk as Buffer;
     total += buffer.length;
     if (total > maxBytes) {
-      throw new HttpError(413, 'Request payload exceeds maximum allowed size.');
+      throw new HttpError(
+        HTTP_STATUS.payloadTooLarge,
+        'Request payload exceeds maximum allowed size.',
+      );
     }
     chunks.push(buffer);
   }
@@ -64,26 +87,63 @@ export async function readJsonBody(req: IncomingMessage, maxBytes: number): Prom
   try {
     return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
   } catch {
-    throw new HttpError(400, 'Request body is not valid JSON.');
+    throw new HttpError(HTTP_STATUS.badRequest, 'Request body is not valid JSON.');
   }
 }
 
 /**
- * Resolves the client IP address safely for rate limiting.
+ * Resolves the client IP for rate limiting.
+ *
+ * Cloud Run's front end appends the real client address as the last X-Forwarded-For
+ * entry; anything to its left was sent by the client and could be spoofed to dodge
+ * the limiter, so only the rightmost hop is trusted.
  *
  * @param req - Incoming HTTP request.
- * @returns Normalized client IP identifier.
+ * @returns Client IP identifier.
  */
 export function getClientIp(req: IncomingMessage): string {
   const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string' && forwarded.trim().length > 0) {
-    return forwarded.split(',')[0]?.trim() ?? 'unknown';
-  }
-  return req.socket.remoteAddress ?? 'unknown';
+  const lastHop = typeof forwarded === 'string' ? forwarded.split(',').at(-1)?.trim() : undefined;
+  return lastHop ?? req.socket.remoteAddress ?? 'unknown';
 }
 
 /**
- * Serves built Vite static assets safely with path-traversal protection and SPA fallback.
+ * Sends binary content with an explicit type and cache policy.
+ *
+ * @param res - Node HTTP ServerResponse.
+ * @param body - Bytes and headers to send.
+ */
+export function sendBinary(
+  res: ServerResponse,
+  body: { readonly bytes: Buffer; readonly contentType: string; readonly cacheControl: string },
+): void {
+  res.statusCode = HTTP_STATUS.ok;
+  res.setHeader('Content-Type', body.contentType);
+  res.setHeader('Cache-Control', body.cacheControl);
+  res.end(body.bytes);
+}
+
+const IMMUTABLE_CACHE = 'public, max-age=31536000, immutable';
+const REVALIDATE_CACHE = 'no-cache';
+
+/**
+ * Reads a file, returning undefined instead of throwing when it is missing.
+ *
+ * @param path - Absolute file path.
+ * @returns File bytes or undefined.
+ */
+async function tryRead(path: string): Promise<Buffer | undefined> {
+  try {
+    return await readFile(path);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Serves built Vite assets with path-traversal protection and an SPA fallback.
+ *
+ * Hashed files under /assets/ are cached for a year; everything else revalidates.
  *
  * @param staticDir - Absolute path to dist/client.
  * @param pathname - Requested URL pathname.
@@ -98,33 +158,34 @@ export async function serveStaticAsset(
   const root = resolve(staticDir);
   const relative = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
   const candidate = resolve(root, relative);
+  if (!candidate.startsWith(`${root}${sep}`)) return false;
 
-  if (!candidate.startsWith(`${root}${sep}`) && candidate !== root) {
-    return false;
-  }
-
-  try {
-    const content = await readFile(candidate);
-    const ext = extname(candidate);
-    res.statusCode = 200;
-    res.setHeader('Content-Type', MIME_TYPES[ext] ?? 'application/octet-stream');
-    res.setHeader(
-      'Cache-Control',
-      pathname.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache',
-    );
-    res.end(content);
+  const file = await tryRead(candidate);
+  if (file) {
+    sendBinary(res, {
+      bytes: file,
+      contentType: MIME_TYPES[extname(candidate)] ?? 'application/octet-stream',
+      cacheControl: pathname.startsWith('/assets/') ? IMMUTABLE_CACHE : REVALIDATE_CACHE,
+    });
     return true;
-  } catch {
-    if (extname(relative)) return false;
-    try {
-      const indexHtml = await readFile(resolve(root, 'index.html'));
-      res.statusCode = 200;
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.end(indexHtml);
-      return true;
-    } catch {
-      return false;
-    }
   }
+  return extname(relative) ? false : serveSpaShell(root, res);
+}
+
+/**
+ * Serves index.html for client-side routes such as /tracker.
+ *
+ * @param root - Absolute static root.
+ * @param res - Node HTTP ServerResponse.
+ * @returns True if the shell was served.
+ */
+async function serveSpaShell(root: string, res: ServerResponse): Promise<boolean> {
+  const indexHtml = await tryRead(resolve(root, 'index.html'));
+  if (!indexHtml) return false;
+  sendBinary(res, {
+    bytes: indexHtml,
+    contentType: HTML_TYPE,
+    cacheControl: REVALIDATE_CACHE,
+  });
+  return true;
 }

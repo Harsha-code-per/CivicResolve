@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
+const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   'Content-Security-Policy': [
     "default-src 'self'",
     "script-src 'self'",
@@ -48,38 +48,4 @@ export function isSameOriginRequest(req: IncomingMessage, allowedOrigin?: string
   const host = req.headers.host;
   if (!host) return false;
   return origin === `http://${host}` || origin === `https://${host}`;
-}
-
-/**
- * Validates that a base64 image data URL contains authentic PNG, JPEG, or WebP magic bytes.
- *
- * @param dataUrl - Data URL string from citizen upload.
- * @returns True when the decoded header matches the declared image MIME type.
- */
-export function hasValidImageMagicBytes(dataUrl: string): boolean {
-  const match = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
-  if (!match) return false;
-
-  const kind = match[1];
-  const base64 = match[2];
-  if (!kind || !base64) return false;
-
-  const header = Buffer.from(base64.slice(0, 24), 'base64');
-  if (kind === 'png') {
-    return (
-      header.length >= 8 &&
-      header[0] === 0x89 &&
-      header[1] === 0x50 &&
-      header[2] === 0x4e &&
-      header[3] === 0x47
-    );
-  }
-  if (kind === 'jpeg') {
-    return header.length >= 3 && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
-  }
-  return (
-    header.length >= 12 &&
-    header.subarray(0, 4).toString('ascii') === 'RIFF' &&
-    header.subarray(8, 12).toString('ascii') === 'WEBP'
-  );
 }

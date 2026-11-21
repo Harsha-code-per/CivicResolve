@@ -6,12 +6,12 @@ export default defineConfig({
   build: {
     outDir: 'dist/client',
     sourcemap: false,
-    target: 'es2022',
-    rollupOptions: {
+    target: 'es2023',
+    rolldownOptions: {
       output: {
-        manualChunks: {
-          react: ['react', 'react-dom'],
-          validation: ['zod'],
+        manualChunks(id: string) {
+          if (/node_modules\/(react|react-dom|scheduler)\//.test(id)) return 'react';
+          return undefined;
         },
       },
     },

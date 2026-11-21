@@ -1,4 +1,4 @@
-export interface RateLimitDecision {
+interface RateLimitDecision {
   readonly allowed: boolean;
   readonly remaining: number;
   readonly retryAfterSeconds: number;

@@ -23,7 +23,9 @@ export function App(): ReactElement {
   const [view, setView] = useState<ActiveView>('overview');
   const [issues, setIssues] = useState<CivicIssue[]>([]);
   const [authenticated, setAuthenticated] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [theme, setTheme] = useState<'light' | 'dark'>(() =>
+    window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+  );
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -47,19 +49,26 @@ export function App(): ReactElement {
     };
   }, []);
 
-  const analytics = computeAnalytics(issues);
+  const [nowMs] = useState(() => Date.now());
+  const analytics = computeAnalytics(issues, nowMs);
 
+  // WAI-ARIA tabs: Left/Right wrap around, Home/End jump, and focus follows selection.
   const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number): void => {
-    let nextIndex = index;
-    if (event.key === 'ArrowRight') nextIndex = (index + 1) % TABS.length;
-    if (event.key === 'ArrowLeft') nextIndex = (index - 1 + TABS.length) % TABS.length;
-    if (event.key === 'Home') nextIndex = 0;
-    if (event.key === 'End') nextIndex = TABS.length - 1;
-    if (nextIndex !== index) {
-      event.preventDefault();
-      const target = TABS[nextIndex];
-      if (target) setView(target.id);
-    }
+    const moves: Partial<Record<string, number>> = {
+      ArrowRight: index + 1,
+      ArrowLeft: index - 1,
+      Home: 0,
+      End: TABS.length - 1,
+    };
+    const move = moves[event.key];
+    if (move === undefined) return;
+    event.preventDefault();
+    const next = (move + TABS.length) % TABS.length;
+    TABS.forEach((tab, position) => {
+      if (position !== next) return;
+      setView(tab.id);
+      document.getElementById(`tab-${tab.id}`)?.focus();
+    });
   };
 
   return (
@@ -129,7 +138,9 @@ export function App(): ReactElement {
               }}
             />
           )}
-          {view === 'tracker' && <IssueTracker issues={issues} analytics={analytics} />}
+          {view === 'tracker' && (
+            <IssueTracker issues={issues} analytics={analytics} nowMs={nowMs} />
+          )}
           {view === 'admin' && (
             <AdminDashboard
               authenticated={authenticated}
@@ -145,7 +156,7 @@ export function App(): ReactElement {
 
       <footer className="footer">
         <span>CivicResolve — AI-Powered Citizen Grievance Management &amp; Resolution</span>
-        <span>Built with Google Gemini, React 19, TypeScript &amp; Cloud Run / Docker</span>
+        <span>Built with Google Gemini, Firestore &amp; Cloud Run</span>
       </footer>
     </div>
   );

@@ -17,14 +17,14 @@ export interface IssuesResponse {
  * @param init - Optional fetch configuration.
  * @returns Parsed JSON response body.
  */
-async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+async function requestJson<T>(
+  url: string,
+  init?: { readonly method: 'POST' | 'PATCH'; readonly body?: string },
+): Promise<T> {
   const response = await fetch(url, {
     credentials: 'same-origin',
     ...init,
-    headers: {
-      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
-      ...init?.headers,
-    },
+    headers: init?.body ? { 'Content-Type': 'application/json' } : {},
   });
 
   const data = (await response.json()) as T & { error?: string };
