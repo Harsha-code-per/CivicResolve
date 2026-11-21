@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
@@ -14,10 +14,11 @@ const MAX_CSS = 12 * KB;
 const html = readFileSync(join(DIST, 'index.html'), 'utf8');
 const totals = { initialJs: 0, totalJs: 0, css: 0 };
 
-for (const file of readdirSync(ASSETS)) {
-  const path = join(ASSETS, file);
-  if (!statSync(path).isFile()) continue;
-  const gz = gzipSync(readFileSync(path)).byteLength;
+// Directory entries carry their type, so files are read once with no separate stat (no check-then-use race).
+for (const entry of readdirSync(ASSETS, { withFileTypes: true })) {
+  if (!entry.isFile()) continue;
+  const file = entry.name;
+  const gz = gzipSync(readFileSync(join(ASSETS, file))).byteLength;
   if (file.endsWith('.css')) totals.css += gz;
   if (!file.endsWith('.js')) continue;
   totals.totalJs += gz;
